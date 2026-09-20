@@ -312,6 +312,32 @@
   .pchip.out{opacity:.4}
   .pchip.out .pnm{text-decoration:line-through}
   #standings .nm{color:inherit}
+  /* ---------- online rooms ---------- */
+  .online-row{display:grid; grid-template-columns:1fr 1fr; gap:14px; margin-top:6px}
+  @media(max-width:560px){.online-row{grid-template-columns:1fr}}
+  .online-box{border:1.5px dashed var(--line); border-radius:8px; padding:14px}
+  .online-box .section-title{margin-bottom:10px}
+  .join-row{display:flex; gap:8px; align-items:center; flex-wrap:wrap; margin-bottom:6px}
+  .join-row input{flex:1; min-width:120px; font:inherit; font-size:15px; background:transparent; border:0; border-bottom:1.5px solid var(--line); outline:none; padding:5px 2px; color:var(--ink)}
+  .join-row input:focus{border-color:var(--red)}
+  #net-name{width:100%; max-width:280px; font:inherit; font-size:16px; background:transparent; border:0; border-bottom:2px solid var(--ink); outline:none; padding:6px 2px; color:var(--ink)}
+  #net-name:focus{border-color:var(--red)}
+  .room-code-box{display:flex; align-items:center; gap:14px; flex-wrap:wrap; background:var(--paper); border:1.5px solid var(--ink); border-radius:8px; padding:10px 14px; margin-bottom:14px}
+  .room-code-box b{font-family:'Courier New',monospace; font-size:24px; letter-spacing:6px; color:var(--red)}
+  .link-btn{background:none; border:0; border-bottom:1.5px solid var(--line); font:inherit; font-style:italic; font-size:13.5px; color:var(--soft); cursor:pointer; padding:2px 1px}
+  .link-btn:hover{color:var(--ink); border-color:var(--ink)}
+  .ring-btn{
+    display:block; margin:0 auto 14px; padding:13px 46px;
+    background:var(--red); color:#f9f3e3; border:1.5px solid var(--ink); border-radius:10px;
+    font:inherit; font-weight:700; font-size:19px; letter-spacing:.18em; cursor:pointer;
+    box-shadow:3px 3px 0 rgba(38,34,26,.25); animation:ringpulse 1s infinite alternate;
+  }
+  .ring-btn:hover{transform:translate(-1px,-1px)}
+  @keyframes ringpulse{to{box-shadow:3px 3px 0 rgba(38,34,26,.25), 0 0 0 7px rgba(182,55,42,.14)}}
+  .lead{flex:1; border-bottom:2px dotted var(--line); transform:translateY(-4px); min-width:20px}
+  .friend-row{display:flex; align-items:center; gap:10px; padding:7px 2px; font-size:14.5px; border-bottom:1.5px dotted var(--line)}
+  .friend-row .fcode{font-family:'Courier New',monospace; font-size:12px; color:var(--soft)}
+  #net-status{margin-top:10px; font-style:italic; color:var(--soft); font-size:13.5px; min-height:18px}
 </style>
 </head>
 <body>
@@ -329,6 +355,7 @@
       <div class="mode-tabs">
         <button type="button" id="tab-solo" class="mode-tab active">solo quest</button>
         <button type="button" id="tab-duel" class="mode-tab">duel · 2–5 players</button>
+        <button type="button" id="tab-online" class="mode-tab">online duel</button>
       </div>
       <div id="solo-setup">
         <label class="field-label" for="name-input">contestant name — for the leaderboard</label>
@@ -340,19 +367,64 @@
         <button type="button" id="btn-add-player" class="btn-voice-test">+ add a player</button>
         <div class="hint-row">First to ring in gets the mic — the faster you ring, the more a correct spelling is worth. A miss costs 20 points and reopens the word to the others.</div>
       </div>
+      <div id="online-setup" class="hidden">
+        <label class="field-label" for="net-name">your name</label>
+        <input id="net-name" maxlength="14" placeholder="e.g. Alex" autocomplete="off">
+        <div class="online-row" id="net-entry">
+          <div class="online-box">
+            <div class="section-title">Host a room</div>
+            <button type="button" class="btn-voice-test" id="btn-create-room">create a room</button>
+          </div>
+          <div class="online-box">
+            <div class="section-title">Join a room</div>
+            <div class="join-row">
+              <input id="net-code" maxlength="60" placeholder="room code or invite link" autocomplete="off">
+              <button type="button" class="btn-voice-test" id="btn-join-room">join</button>
+            </div>
+          </div>
+        </div>
+        <div id="net-lobby" class="hidden">
+          <div class="room-code-box">room code <b id="net-code-display"></b>
+            <button type="button" class="link-btn" id="btn-copy-link">copy invite link</button>
+            <button type="button" class="link-btn" id="btn-leave-room">leave room</button>
+          </div>
+          <div class="field-label">players in the room</div>
+          <div id="net-players" class="players"></div>
+          <div id="host-controls" class="hidden">
+            <button type="button" class="btn-voice-test" id="btn-start-online">start the duel</button>
+            <select id="net-diff" class="voice-select" aria-label="difficulty" style="margin-left:10px">
+              <option value="easy">Easy</option>
+              <option value="medium" selected>Medium</option>
+              <option value="hard">Hard</option>
+            </select>
+          </div>
+          <div id="net-waiting" class="hidden" style="font-style:italic; color:var(--soft); margin-top:10px">Waiting for the host to start…</div>
+        </div>
+        <div id="net-status"></div>
+        <div class="section-title" style="margin-top:22px">Friends</div>
+        <div class="join-row">
+          <input id="friend-name" maxlength="14" placeholder="friend's name">
+          <input id="friend-code" maxlength="60" placeholder="their room code or invite link">
+          <button type="button" class="btn-voice-test" id="btn-save-friend">save friend</button>
+        </div>
+        <div id="friends-list"></div>
+        <div class="hint-row">Rooms are peer-to-peer — share your invite link and up to 4 friends join live from their own devices. Save friends here to duel them again in one click.</div>
+      </div>
       <div class="voice-row">
         <button type="button" class="btn-voice-test" id="btn-test-voice">test your speaker</button>
         <select id="voice-select" class="voice-select" aria-label="bot voice"></select>
         <label class="opt"><input type="checkbox" id="opt-twice" checked> say each word twice</label>
       </div>
 
-      <div class="section-title" style="margin-top:22px">Choose your difficulty</div>
-      <div class="diff-row">
-        <button class="diff-card easy" data-diff="easy"><span class="dc-pts">points ×1</span><span class="dc-name">Easy</span><span class="dc-sub">3–7 letters · 117 words</span><span class="dc-meta">30 seconds per word</span></button>
-        <button class="diff-card medium" data-diff="medium"><span class="dc-pts">points ×1.5</span><span class="dc-name">Medium</span><span class="dc-sub">everyday English · 106 words</span><span class="dc-meta">25 seconds per word</span></button>
-        <button class="diff-card hard" data-diff="hard"><span class="dc-pts">points ×2</span><span class="dc-name">Hard</span><span class="dc-sub">spelling-bee brutal · 118 words</span><span class="dc-meta">20 seconds per word</span></button>
+      <div id="diff-section">
+        <div class="section-title" style="margin-top:22px">Choose your difficulty</div>
+        <div class="diff-row">
+          <button class="diff-card easy" data-diff="easy"><span class="dc-pts">points ×1</span><span class="dc-name">Easy</span><span class="dc-sub">3–7 letters · 117 words</span><span class="dc-meta">30 seconds per word</span></button>
+          <button class="diff-card medium" data-diff="medium"><span class="dc-pts">points ×1.5</span><span class="dc-name">Medium</span><span class="dc-sub">everyday English · 106 words</span><span class="dc-meta">25 seconds per word</span></button>
+          <button class="diff-card hard" data-diff="hard"><span class="dc-pts">points ×2</span><span class="dc-name">Hard</span><span class="dc-sub">spelling-bee brutal · 118 words</span><span class="dc-meta">20 seconds per word</span></button>
+        </div>
+        <div class="hint-row">Spell fast and keep a streak going for combo multipliers. <b>Repeat</b>, <b>Slower</b>, <b>Meaning</b> and <b>Sentence</b> are free — but the clock keeps ticking.</div>
       </div>
-      <div class="hint-row">Spell fast and keep a streak going for combo multipliers. <b>Repeat</b>, <b>Slower</b>, <b>Meaning</b> and <b>Sentence</b> are free — but the clock keeps ticking.</div>
     </div>
 
     <div class="card">
@@ -392,6 +464,7 @@
       </div>
       <div class="say-kicker">The bee says</div>
       <div class="bot-line" id="bot-say">Listen…</div>
+      <button type="button" id="btn-ring" class="ring-btn hidden">RING IN</button>
       <div id="feedback" class="feedback" aria-live="polite"></div>
       <form id="answer-form" autocomplete="off">
         <input id="answer-input" maxlength="40" placeholder="Type what you hear…" autocomplete="off" spellcheck="false">
@@ -1000,8 +1073,19 @@ function tickLoop(){
   paintTimer();
 }
 function onTimeUp(){
-  if(S.mode!=='duel'){ timeUp(); return; }
-  if(S.phase==='answer') duelWrong(true); else nobodyGotIt();
+  if(S.mode==='online'){
+    if(N.isHost){
+      if(S.phase==='answer') netAnswerTimeout();
+      else {
+        const m={t:'worddead', scores:snapshot()};
+        N.send(m); applyDead(m);
+        setTimeout(()=>{ if(S.mode==='online' && N.started) nextOnlineRound(); }, 2200);
+      }
+    }
+    return;                        // clients wait for the host's call
+  }
+  if(S.mode==='duel'){ if(S.phase==='answer') duelWrong(true); else nobodyGotIt(); return; }
+  timeUp();
 }
 
 /* ================= Game flow ================= */
@@ -1111,6 +1195,14 @@ $('answer-form').addEventListener('submit', e=>{
   e.preventDefault();
   if(!S.playing) return;
   const inp = $('answer-input');
+  if(S.mode==='online'){
+    const val = inp.value.trim();
+    if(!val || N.activePid!==N.selfId) return;
+    inp.disabled=true; stopTimer();
+    if(N.isHost) hostAnswer(N.selfId, val);
+    else N.send({t:'answer', text:val});
+    return;
+  }
   const val = inp.value.trim().toLowerCase();
   if(!val) return;
   S.playing=false; inp.disabled=true; stopTimer();
@@ -1168,17 +1260,28 @@ function renderPlayers(){
   S.players.forEach((p,i)=>{
     const chip=document.createElement('div');
     chip.className='pchip'+(i===S.active?' active':'')+(p.locked?' out':'');
-    chip.style.setProperty('--pc', p.color);
+    chip.style.setProperty('--pc', p.color || PLAYER_COLORS[i]);
     const dot=document.createElement('span'); dot.className='pdot';
     const nm=document.createElement('span'); nm.className='pnm'; nm.textContent=p.name;
-    const sc=document.createElement('span'); sc.className='psc'; sc.textContent=p.score.toLocaleString();
-    const key=document.createElement('span'); key.className='pkey-mini'; key.textContent=p.key.toUpperCase();
-    chip.append(dot,nm,sc,key);
+    const sc=document.createElement('span'); sc.className='psc'; sc.textContent=(p.score||0).toLocaleString();
+    chip.append(dot,nm,sc);
+    if(p.key){
+      const key=document.createElement('span'); key.className='pkey-mini'; key.textContent=p.key.toUpperCase();
+      chip.append(key);
+    }
     box.appendChild(chip);
   });
 }
 
 document.addEventListener('keydown', e=>{
+  if(S.mode==='online'){
+    if(e.key===' ' || e.code==='Space'){
+      const ae=document.activeElement;
+      if(ae && (ae.tagName==='INPUT' || ae.tagName==='SELECT')) return;
+      e.preventDefault(); ringIn();
+    }
+    return;
+  }
   if(!e.key || e.key.length!==1) return;
   const ae=document.activeElement;
   if(ae && ae.tagName==='INPUT' && !ae.disabled) return;  // someone is typing
@@ -1344,6 +1447,417 @@ function gameOver(){
   showScreen('over');
 }
 
+/* ================= Online duels (rooms) ================= */
+const ROOM_APP = 'spelling-bee-duel-v1';
+const TOTAL_WORDS = 12;
+const NET_ANSWER_TIME = 12;
+const NET_PENALTY = 20;
+const N = {
+  lib:null, room:null, send:null, selfId:null,
+  isHost:false, code:'', hostPid:null, started:false, gotLobby:false,
+  players:[], order:[], idx:0, wordTimeLeft:0, activePid:null, netDiff:'medium',
+  helloTries:null
+};
+
+function netStatus(msg){ const el=$('net-status'); if(el) el.textContent=msg||''; }
+function byPid(pid){ return S.players.find(p=>p.pid===pid); }
+function pcolor(pid){ const i=S.players.findIndex(p=>p.pid===pid); return PLAYER_COLORS[i>=0?i:0]; }
+function snapshot(){ return S.players.map(p=>[p.pid, p.score, p.won]); }
+function applySnapshot(arr){ (arr||[]).forEach(s=>{ const p=byPid(s[0]); if(p){ p.score=s[1]; p.won=s[2]; } }); }
+function syncActive(){ S.active = S.players.findIndex(p=>p.pid===N.activePid); }
+
+async function loadNet(){
+  if(N.lib) return N.lib;
+  const urls=[
+    'https://esm.sh/trystero@0.21/nostr',
+    'https://esm.sh/trystero@0.21/mqtt',
+    'https://esm.sh/trystero@0.21/torrent'
+  ];
+  let err=null;
+  for(const u of urls){ try{ N.lib = await import(u); return N.lib; }catch(e){ err=e; } }
+  throw err || new Error('offline');
+}
+function makeCode(){
+  const abc='ABCDEFGHJKMNPQRSTUVWXYZ23456789'; let s='';
+  for(let i=0;i<5;i++) s+=abc[Math.floor(Math.random()*abc.length)];
+  return s;
+}
+function netName(){ return ($('net-name').value||'').trim().slice(0,14) || 'Player'; }
+function extractCode(raw){ const m=String(raw||'').toUpperCase().match(/([A-Z2-9]{5})/); return m?m[1]:null; }
+function setNetBusy(which, busy, label){ const b=$(which); if(!b) return; b.disabled=busy; if(label!==undefined) b.textContent=label; }
+
+async function netConnect(asHost, code){
+  if(N.room) teardownNet();
+  netStatus(asHost ? 'Creating your room…' : 'Joining room '+code+'…');
+  try{
+    const lib=await loadNet();
+    N.isHost=!!asHost; N.code=asHost?makeCode():code;
+    N.room=lib.joinRoom({appId:ROOM_APP}, N.code);
+    N.selfId=lib.selfId;
+    const [send, get]=N.room.makeAction('game');
+    get((data,peerId)=>onNet(data,peerId));
+    N.send=(msg,target)=>{ if(target) send(msg,target); else send(msg); };
+    S.players=N.players=[{pid:N.selfId, name:netName(), score:0, won:0, locked:false}];
+    N.started=false; N.idx=0; N.activePid=null; N.gotLobby=!!asHost; N.hostPid=N.selfId;
+    N.room.onPeerJoin(pid=>{
+      if(N.isHost){
+        N.send({t:'lobby', players:S.players.map(p=>({pid:p.pid,name:p.name})), hostPid:N.selfId}, pid);
+      } else {
+        N.send({t:'hello', name:netName()}, pid);
+      }
+    });
+    N.room.onPeerLeave(pid=>peerGone(pid));
+    if(!N.isHost){
+      // keep greeting until the host has our name (extra hellos are harmless)
+      let tries=0;
+      N.helloTries=setInterval(()=>{
+        tries++;
+        if(!N.room || tries>8){ clearInterval(N.helloTries); N.helloTries=null; return; }
+        N.send({t:'hello', name:netName()});
+      }, 1300);
+    }
+    showLobby();
+    netStatus(N.isHost ? 'Room ready — copy the invite link and send it to your friends!' : 'Joined! Waiting for the host…');
+  }catch(e){
+    netStatus('Online error: ' + ((e && e.message) || e) + ' — check your connection and try again.');
+  }finally{
+    setNetBusy('btn-create-room', false, 'create a room');
+    setNetBusy('btn-join-room', false, 'join');
+  }
+}
+
+function teardownNet(){
+  try{ if(N.helloTries) clearInterval(N.helloTries); }catch(e){}
+  try{ N.room && N.room.leave(); }catch(e){}
+  N.room=null; N.send=null; N.isHost=false; N.started=false; N.hostPid=null;
+  N.players=[]; S.players=[]; N.activePid=null; S.active=-1;
+  stopTimer(); if(synth) synth.cancel();
+  const lb=$('net-lobby'); if(lb) lb.classList.add('hidden');
+  const en=$('net-entry'); if(en) en.classList.remove('hidden');
+  setNetBusy('btn-create-room', false, 'create a room');
+  setNetBusy('btn-join-room', false, 'join');
+}
+function abortNet(msg){
+  teardownNet();
+  setMode('online'); showScreen('start');
+  netStatus(msg||'Disconnected.');
+}
+function netJoin(){
+  const code=extractCode($('net-code').value);
+  if(!code){ netStatus('Enter the 5-letter room code — or paste an invite link.'); return; }
+  netConnect(false, code);
+}
+
+function onNet(msg, peerId){
+  if(!msg || !msg.t) return;
+  switch(msg.t){
+    case 'hello':
+      if(N.isHost){
+        let p=byPid(peerId);
+        if(!p){
+          if(S.players.length>=5){ N.send({t:'roomfull'}, peerId); return; }
+          S.players.push({pid:peerId, name:String(msg.name||'Player').slice(0,14), score:0, won:0, locked:false});
+        } else { p.name=String(msg.name||p.name).slice(0,14); }
+        broadcastLobby();
+        if(!N.started) renderLobbyPlayers();
+      }
+      break;
+    case 'roomfull': abortNet('That room is full (5 players max).'); break;
+    case 'lobby':
+      if(!N.isHost && !N.started){
+        N.hostPid=msg.hostPid; N.gotLobby=true;
+        S.players=msg.players.map(p=>({pid:p.pid, name:p.name, score:0, won:0, locked:false}));
+        renderLobbyPlayers();
+        netStatus('');
+      }
+      break;
+    case 'buzz':   if(N.isHost) hostBuzz(peerId); break;
+    case 'answer': if(N.isHost) hostAnswer(peerId, msg.text); break;
+    case 'start':  applyStart(msg); break;
+    case 'round':  applyRound(msg); break;
+    case 'mic':    applyMic(msg); break;
+    case 'result': applyResult(msg); break;
+    case 'reopen': applyReopen(msg); break;
+    case 'worddead': applyDead(msg); break;
+    case 'end':    applyEnd(msg); break;
+    case 'abort':  abortNet(msg.msg||'The duel was cancelled.'); break;
+  }
+}
+function broadcastLobby(){
+  if(!N.isHost || !N.room) return;
+  N.send({t:'lobby', players:S.players.map(p=>({pid:p.pid,name:p.name})), hostPid:N.selfId});
+  renderLobbyPlayers();
+}
+function peerGone(pid){
+  if(!N.room) return;
+  if(!N.isHost && pid===N.hostPid){ abortNet('The host left the duel.'); return; }
+  if(N.isHost){
+    const wasActive = N.activePid===pid;
+    S.players=S.players.filter(q=>q.pid!==pid);
+    if(S.phase==='answer' && wasActive) hostResolve(pid, false, true);
+    broadcastLobby();
+    if(document.getElementById('screen-start').classList.contains('active')) renderLobbyPlayers();
+    else renderPlayers();
+  }
+}
+
+function showLobby(){
+  $('net-lobby').classList.remove('hidden');
+  $('net-entry').classList.add('hidden');
+  $('net-code-display').textContent=N.code;
+  $('host-controls').classList.toggle('hidden', !N.isHost);
+  $('net-waiting').classList.toggle('hidden', N.isHost);
+  renderLobbyPlayers();
+}
+function renderLobbyPlayers(){
+  const box=$('net-players'); box.innerHTML='';
+  S.players.forEach((p,i)=>{
+    const chip=document.createElement('div');
+    chip.className='pchip';
+    chip.style.setProperty('--pc', PLAYER_COLORS[i]);
+    const dot=document.createElement('span'); dot.className='pdot';
+    const nm=document.createElement('span'); nm.className='pnm'; nm.textContent=p.name;
+    chip.append(dot,nm);
+    if(N.isHost && p.pid===N.selfId){ const h=document.createElement('span'); h.className='dt'; h.textContent='host'; chip.append(h); }
+    box.appendChild(chip);
+  });
+}
+
+function copyInvite(){
+  const base = location.origin.startsWith('http') ? (location.origin+location.pathname) : location.href.split('#')[0];
+  const url = base+'#room='+N.code;
+  const done = ()=>netStatus('Invite link copied — send it to a friend!');
+  if(navigator.clipboard && navigator.clipboard.writeText){ navigator.clipboard.writeText(url).then(done, ()=>fallbackCopy(url, done)); }
+  else fallbackCopy(url, done);
+}
+function fallbackCopy(text, done){
+  const ta=document.createElement('textarea'); ta.value=text; document.body.appendChild(ta);
+  ta.select(); try{ document.execCommand('copy'); done(); }catch(e){ netStatus('Copy failed — your room code is '+N.code); }
+  ta.remove();
+}
+
+/* ---------- host referee ---------- */
+function hostStart(){
+  if(!N.isHost) return;
+  N.netDiff=$('net-diff').value;
+  S.players.forEach(p=>{p.score=0; p.won=0; p.locked=false;});
+  N.order=shuffle(WORDS[N.netDiff].slice());
+  N.idx=0; N.started=true;
+  const msg={t:'start', diff:N.netDiff, total:TOTAL_WORDS, players:S.players.map(p=>({pid:p.pid,name:p.name}))};
+  N.send(msg); applyStart(msg);
+  hostRound();
+}
+function applyStart(msg){
+  S.mode='online'; S.diff=msg.diff; S.limit=DIFF[msg.diff].time;
+  S.missed=[]; S.seen=0; S.playing=true;
+  S.players=msg.players.map(p=>({pid:p.pid, name:p.name, score:0, won:0, locked:false}));
+  N.activePid=null; S.active=-1; S.phase='listen'; S.spoken=false;
+  const pill=$('diff-pill'); pill.textContent=DIFF[msg.diff].label.toUpperCase(); pill.className='pill '+msg.diff;
+  $('bot-say').textContent='Listen…';
+  $('hearts').classList.add('hidden'); $('best-line').classList.add('hidden');
+  $('score-box').classList.add('hidden'); $('players').classList.remove('hidden');
+  showScreen('game');
+}
+function hostRound(){
+  if(N.idx>=TOTAL_WORDS){ finishOnline(); return; }
+  S.limit=DIFF[N.netDiff].time;
+  const pair=N.order[N.idx];
+  S.word=pair[0]; S.definition=pair[1];
+  const msg={t:'round', n:N.idx+1, total:TOTAL_WORDS, word:S.word, def:S.definition, limit:S.limit, players:snapshot()};
+  N.send(msg); applyRound(msg);
+}
+function applyRound(msg){
+  S.word=msg.word; S.definition=msg.def; S.seen=msg.n; S.playing=true;
+  S.players.forEach(p=>p.locked=false);
+  if(msg.players) applySnapshot(msg.players);
+  N.activePid=null; S.active=-1; S.phase='listen'; S.spoken=false;
+  $('word-num').textContent='Word '+msg.n+' of '+msg.total;
+  const inp=$('answer-input'); inp.value=''; inp.disabled=true;
+  renderPlayers(); updateRing();
+  setFeedback('Hands ready — RING IN!', '');
+  runTimer(msg.limit,'listen');
+  const tok=S.session;
+  setTimeout(()=>{ if(tok===S.session && S.mode==='online'){ S.spoken=true; sayWordTwice(DIFF[S.diff].rate); updateRing(); } }, 450);
+}
+function nextOnlineRound(){
+  if(S.mode!=='online' || !N.started) return;
+  N.idx++;
+  hostRound();
+}
+
+function ringIn(){
+  if(S.mode!=='online' || !S.playing || S.phase!=='listen' || !S.spoken) return;
+  const me=S.players.find(p=>p.pid===N.selfId);
+  if(!me || me.locked) return;
+  if(N.isHost) hostBuzz(N.selfId);
+  else N.send({t:'buzz'});
+}
+function hostBuzz(pid){
+  if(S.phase!=='listen') return;
+  const p=byPid(pid); if(!p||p.locked) return;
+  const reaction=Math.max(0, S.limit - S.time);
+  N.wordTimeLeft=S.time; N.activePid=pid; S.phase='answer';
+  const msg={t:'mic', pid:pid, reaction:reaction, time:NET_ANSWER_TIME};
+  N.send(msg); applyMic(msg);
+  runTimer(NET_ANSWER_TIME,'answer');
+}
+function applyMic(msg){
+  stopTimer();
+  S.phase='answer'; N.activePid=msg.pid; syncActive();
+  S.time=msg.time; paintTimer();
+  if(!N.isHost) runTimer(NET_ANSWER_TIME,'answer');
+  const inp=$('answer-input'); inp.value=''; inp.disabled=(msg.pid!==N.selfId);
+  const p=byPid(msg.pid);
+  if(msg.pid===N.selfId){ inp.focus(); setFeedback('You have the mic — spell it!', 'warn'); }
+  else setFeedback('<b style="color:'+pcolor(msg.pid)+'">'+esc(p?p.name:'?')+'</b> rang in at '+msg.reaction.toFixed(1)+'s — listening…', 'warn');
+  renderPlayers(); updateRing();
+}
+function hostAnswer(pid, text){
+  if(S.phase!=='answer' || N.activePid!==pid) return;
+  hostResolve(pid, String(text).trim().toLowerCase()===S.word.toLowerCase(), false);
+}
+function netAnswerTimeout(){
+  if(S.phase!=='answer' || N.activePid==null) return;
+  hostResolve(N.activePid, false, true);
+}
+function hostResolve(pid, right, timedOut){
+  const p=byPid(pid); if(!p) return;
+  if(right){
+    const reaction=Math.max(0, S.limit - N.wordTimeLeft);
+    const pts=Math.round((40 + S.word.length*10 + Math.max(0, 50 - reaction*4)) * DIFF[S.diff].mult);
+    p.score+=pts; p.won++;
+    S.phase='dead'; stopTimer(); S.playing=false;
+    const msg={t:'result', kind:'correct', pid:pid, pts:pts, reaction:reaction, scores:snapshot()};
+    N.send(msg); applyResult(msg);
+    setTimeout(()=>{ if(S.mode==='online' && N.started) nextOnlineRound(); }, 1800);
+  }else{
+    if(!timedOut) p.score=Math.max(0, p.score-NET_PENALTY);
+    p.locked=true;
+    const msg={t:'result', kind:timedOut?'timeout':'wrong', pid:pid, scores:snapshot()};
+    N.send(msg); applyResult(msg);
+    const alive=S.players.filter(q=>!q.locked);
+    if(alive.length){
+      const msg2={t:'reopen', tleft:Math.max(1,N.wordTimeLeft)};
+      N.send(msg2); applyReopen(msg2);
+      runTimer(Math.max(1,N.wordTimeLeft),'listen');
+    }else{
+      const msg3={t:'worddead', scores:snapshot()};
+      N.send(msg3); applyDead(msg3);
+      setTimeout(()=>{ if(S.mode==='online' && N.started) nextOnlineRound(); }, 2200);
+    }
+  }
+}
+function applyResult(msg){
+  applySnapshot(msg.scores);
+  const p=byPid(msg.pid);
+  const inp=$('answer-input'); inp.value=''; inp.disabled=true;
+  if(msg.kind==='correct'){
+    S.phase='dead'; stopTimer(); S.playing=false;
+    if(p) p.locked=false;
+    confettiBurst(20);
+    setFeedback('✓ <b style="color:'+pcolor(msg.pid)+'">'+esc(p?p.name:'?')+'</b> spells it — <b>+'+msg.pts.toLocaleString()+'</b> <i>(rang in at '+msg.reaction.toFixed(1)+'s)</i>', 'good');
+  }else{
+    if(p) p.locked=true;
+    if(msg.pid===N.selfId) S.missed.push({w:S.word, d:S.definition});
+    setFeedback(msg.kind==='timeout'
+      ? '⌛ '+esc(p?p.name:'?')+' ran out of time — the word is still open.'
+      : '✗ '+esc(p?p.name:'?')+' missed it (−'+NET_PENALTY+').', 'bad');
+  }
+  renderPlayers(); updateRing();
+}
+function applyReopen(msg){
+  S.phase='listen'; N.activePid=null; S.active=-1; S.playing=true;
+  if(!N.isHost) runTimer(msg.tleft,'listen');
+  setFeedback('Still open: '+S.players.filter(q=>!q.locked).map(q=>esc(q.name)).join(', ')+'.', '');
+  renderPlayers(); updateRing();
+}
+function applyDead(msg){
+  applySnapshot(msg.scores);
+  S.phase='dead'; stopTimer(); S.playing=false;
+  S.missed.push({w:S.word, d:S.definition});
+  const inp=$('answer-input'); inp.value=''; inp.disabled=true;
+  setFeedback('✗ Nobody got it — the word was <b class="reveal">'+S.word.toUpperCase()+'</b><span class="def">meaning: '+S.definition+'</span>', 'bad');
+  renderPlayers(); updateRing();
+}
+function finishOnline(){
+  const order=S.players.slice().sort((a,b)=>b.score-a.score);
+  const msg={t:'end', standings:order.map(p=>({pid:p.pid,name:p.name,score:p.score,won:p.won}))};
+  N.send(msg); applyEnd(msg);
+}
+function applyEnd(msg){
+  N.started=false; stopTimer(); S.playing=false;
+  if(synth) synth.cancel();
+  const st=msg.standings;
+  const tied=st.length>1 && st[0].score===st[1].score;
+  $('btn-again').textContent='back to the room';
+  $('btn-menu').textContent='☰ leave';
+  $('over-title').textContent = tied ? 'Dead heat!' : (st[0].name+' wins');
+  $('final-score').textContent = st[0].score.toLocaleString();
+  $('final-label').textContent = 'winning score';
+  $('new-record').classList.add('hidden');
+  $('stats-grid').classList.add('hidden');
+  $('lb-title').classList.add('hidden');
+  $('board-over').classList.add('hidden');
+  $('standings-title').classList.remove('hidden');
+  $('standings').classList.remove('hidden');
+  const ol=$('standings'); ol.innerHTML='';
+  st.forEach((p,i)=>{
+    const idx=S.players.findIndex(q=>q.pid===p.pid);
+    const li=document.createElement('li'); if(i===0 && !tied) li.classList.add('me');
+    const rk=document.createElement('span'); rk.className='rk'; rk.textContent=(i+1)+'.';
+    const nm=document.createElement('span'); nm.className='nm'; nm.textContent=p.name; nm.style.color=PLAYER_COLORS[idx>=0?idx:0];
+    const ld=document.createElement('span'); ld.className='lead';
+    const dt=document.createElement('span'); dt.className='dt'; dt.textContent='won '+p.won+' word'+(p.won===1?'':'s');
+    const sc=document.createElement('span'); sc.className='sc'; sc.textContent=p.score.toLocaleString();
+    li.append(rk,nm,ld,dt,sc); ol.appendChild(li);
+  });
+  renderReview();
+  showScreen('over');
+}
+function updateRing(){
+  const b=$('btn-ring');
+  const me=S.players.find(p=>p.pid===N.selfId);
+  const show=S.mode==='online' && S.phase==='listen' && S.playing && S.spoken && me && !me.locked;
+  b.classList.toggle('hidden', !show);
+}
+
+/* ---------- friends ---------- */
+function loadFriends(){ try{ const f=JSON.parse(localStorage.getItem('sb_friends')||'[]'); return Array.isArray(f)?f:[]; }catch(e){ return []; } }
+function persistFriends(f){ try{ localStorage.setItem('sb_friends', JSON.stringify(f)); }catch(e){} }
+function renderFriends(){
+  const box=$('friends-list'); box.innerHTML='';
+  const f=loadFriends();
+  if(!f.length){
+    const d=document.createElement('div');
+    d.style.cssText='font-style:italic;color:var(--soft);font-size:13.5px;padding:6px 0';
+    d.textContent='No friends saved yet — save their room code to duel them in one click.';
+    box.appendChild(d); return;
+  }
+  f.forEach((fr,i)=>{
+    const row=document.createElement('div'); row.className='friend-row';
+    const nm=document.createElement('span'); nm.textContent=fr.name; nm.style.fontWeight='700';
+    const code=document.createElement('span'); code.className='fcode'; code.textContent=fr.code;
+    const lead=document.createElement('span'); lead.className='lead';
+    const join=document.createElement('button'); join.type='button'; join.className='link-btn'; join.textContent='duel';
+    join.addEventListener('click', ()=>{ if(N.room){ netStatus('Leave your current room first.'); return; } netConnect(false, fr.code); });
+    const rm=document.createElement('button'); rm.type='button'; rm.className='premove'; rm.textContent='✕'; rm.title='remove friend';
+    rm.addEventListener('click', ()=>{ const a=loadFriends(); a.splice(i,1); persistFriends(a); renderFriends(); });
+    row.append(nm, code, lead, join, rm);
+    box.appendChild(row);
+  });
+}
+function saveFriend(){
+  const name=($('friend-name').value||'').trim().slice(0,14) || 'Friend';
+  const code=extractCode($('friend-code').value);
+  if(!code){ netStatus('Enter a 5-letter room code (or paste an invite link) to save a friend.'); return; }
+  const f=loadFriends().filter(x=>x.code!==code);
+  f.push({name:name, code:code});
+  persistFriends(f.slice(-12));
+  $('friend-name').value=''; $('friend-code').value='';
+  renderFriends();
+  netStatus('Saved '+name+' — one click to duel them again.');
+}
+
 /* ================= Wire up ================= */
 document.querySelectorAll('.diff-card').forEach(c =>
   c.addEventListener('click', ()=>startGame(c.dataset.diff)));
@@ -1382,21 +1896,33 @@ $('btn-quit').addEventListener('click', ()=>{
   S.session++; stopTimer();
   if(synth) synth.cancel();
   S.playing=false;
+  if(S.mode==='online') teardownNet();
   setTab(tab);
   showScreen('start');
 });
-$('btn-again').addEventListener('click', ()=>startGame(S.diff));
-$('btn-menu').addEventListener('click', ()=>{ setTab(tab); showScreen('start'); });
+$('btn-again').addEventListener('click', ()=>{
+  if(S.mode==='online'){
+    S.playing=false; stopTimer();
+    setMode('online'); showScreen('start'); showLobby();
+    return;
+  }
+  startGame(S.diff);
+});
+$('btn-menu').addEventListener('click', ()=>{
+  if(S.mode==='online') teardownNet();
+  setTab(tab); showScreen('start');
+});
 
 /* ---------- mode & duel roster ---------- */
 let MODE='solo';
 let duelRoster=[{name:''},{name:''}];
 function setMode(m){
   MODE=m;
-  $('tab-solo').classList.toggle('active', m==='solo');
-  $('tab-duel').classList.toggle('active', m==='duel');
+  ['solo','duel','online'].forEach(x=>$('tab-'+x).classList.toggle('active', m===x));
   $('solo-setup').classList.toggle('hidden', m!=='solo');
   $('duel-setup').classList.toggle('hidden', m!=='duel');
+  $('online-setup').classList.toggle('hidden', m!=='online');
+  $('diff-section').classList.toggle('hidden', m==='online');
 }
 function renderRoster(){
   const box=$('player-rows'); box.innerHTML='';
@@ -1440,6 +1966,27 @@ $('voice-select').addEventListener('change', ()=>{
   say('This is my new voice. Good luck!', 0.9);
 });
 setTab('easy');
+
+/* ---------- online wiring ---------- */
+$('tab-online').addEventListener('click', ()=>setMode('online'));
+$('btn-create-room').addEventListener('click', ()=>netConnect(true));
+$('btn-join-room').addEventListener('click', ()=>netJoin());
+$('net-code').addEventListener('keydown', e=>{ if(e.key==='Enter'){ e.preventDefault(); netJoin(); } });
+$('btn-leave-room').addEventListener('click', ()=>teardownNet());
+$('btn-copy-link').addEventListener('click', copyInvite);
+$('btn-start-online').addEventListener('click', hostStart);
+$('btn-save-friend').addEventListener('click', saveFriend);
+$('btn-ring').addEventListener('click', ringIn);
+window.addEventListener('pagehide', ()=>{ try{ N.room && N.room.leave(); }catch(e){} });
+try{ $('net-name').value = localStorage.getItem('sb_net_name') || localStorage.getItem('sb_name') || ''; }catch(e){}
+$('net-name').addEventListener('input', ()=>{ try{ localStorage.setItem('sb_net_name', $('net-name').value); }catch(e){} });
+renderFriends();
+const roomHash = location.hash.match(/room=([A-Za-z0-9]{5})/);
+if(roomHash){
+  setMode('online');
+  $('net-code').value = roomHash[1].toUpperCase();
+  netConnect(false, roomHash[1].toUpperCase());
+}
 </script>
 </body>
 </html>
