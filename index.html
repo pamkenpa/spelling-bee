@@ -72,11 +72,18 @@
   }
   #name-input:focus{border-color:var(--red)}
   .btn-voice-test{
-    margin-top:14px; padding:7px 16px; cursor:pointer; font:inherit; font-size:12px;
+    margin-top:0; padding:7px 16px; cursor:pointer; font:inherit; font-size:12px;
     letter-spacing:.18em; text-transform:uppercase;
     border:1.5px solid var(--ink); border-radius:999px; background:none; color:var(--ink);
   }
   .btn-voice-test:hover{background:var(--ink); color:var(--paper)}
+  .voice-row{display:flex; gap:12px; align-items:center; flex-wrap:wrap; margin-top:14px}
+  .voice-select{
+    font-family:'Courier New',monospace; font-size:12.5px; color:var(--ink);
+    background:var(--panel); border:1.5px solid var(--ink); border-radius:6px; padding:7px 8px; max-width:270px;
+  }
+  .opt{display:inline-flex; gap:7px; align-items:center; font-size:13.5px; font-style:italic; color:var(--soft); cursor:pointer}
+  .opt input{accent-color:#b6372a; width:15px; height:15px}
 
   .diff-row{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-top:6px}
   .diff-card{
@@ -126,9 +133,12 @@
 
   /* ---------- game HUD ---------- */
   .hud{display:flex; justify-content:space-between; align-items:flex-start; gap:10px; margin-bottom:14px; flex-wrap:wrap}
-  .hearts{font-size:24px; letter-spacing:6px; line-height:1}
-  .heart{display:inline-block; transition:all .35s; color:var(--red)}
-  .heart.lost{color:var(--line); transform:scale(.85)}
+  .hearts{display:flex; gap:6px; align-items:center; line-height:1}
+  .heart{display:inline-block; transition:transform .3s}
+  .heart svg{display:block}
+  .heart path{fill:var(--red); stroke:var(--ink); stroke-width:1.6; transition:fill .3s, stroke .3s}
+  .heart.lost{transform:scale(.85)}
+  .heart.lost path{fill:#eee5cd; stroke:#b9ad90}
   .best-line{color:var(--soft); font-style:italic; font-size:13.5px; margin-top:8px}
   .hud-right{display:flex; gap:14px; align-items:center; flex-wrap:wrap}
   .streak-box{
@@ -330,7 +340,11 @@
         <button type="button" id="btn-add-player" class="btn-voice-test">+ add a player</button>
         <div class="hint-row">First to ring in gets the mic — the faster you ring, the more a correct spelling is worth. A miss costs 20 points and reopens the word to the others.</div>
       </div>
-      <button type="button" class="btn-voice-test" id="btn-test-voice">test your speaker</button>
+      <div class="voice-row">
+        <button type="button" class="btn-voice-test" id="btn-test-voice">test your speaker</button>
+        <select id="voice-select" class="voice-select" aria-label="bot voice"></select>
+        <label class="opt"><input type="checkbox" id="opt-twice" checked> say each word twice</label>
+      </div>
 
       <div class="section-title" style="margin-top:22px">Choose your difficulty</div>
       <div class="diff-row">
@@ -771,9 +785,9 @@ const WORDS = {
 };
 
 const DIFF = {
-  easy:   { label:'Easy',   mult:1,   time:30, rate:0.85 },
-  medium: { label:'Medium', mult:1.5, time:25, rate:0.95 },
-  hard:   { label:'Hard',   mult:2,   time:20, rate:1.0  }
+  easy:   { label:'Easy',   mult:1,   time:30, rate:0.8  },
+  medium: { label:'Medium', mult:1.5, time:25, rate:0.85 },
+  hard:   { label:'Hard',   mult:2,   time:20, rate:0.9  }
 };
 
 const $ = id => document.getElementById(id);
@@ -789,7 +803,17 @@ const WRONG_PENALTY = 20;   // points lost for a wrong spelling
 /* ================= TTS ================= */
 const synth = ('speechSynthesis' in window) ? window.speechSynthesis : null;
 let voices = [];
-function refreshVoices(){ if(synth) voices = synth.getVoices() || []; }
+function voiceRank(v){
+  const n = (v.name || '').toLowerCase();
+  if(/natural|neural|online/.test(n)) return 4;          // modern high-quality voices
+  if(/premium|enhanced|google/.test(n)) return 3;
+  if(/aria|jenny|guy|zira|david|serena|samantha/.test(n)) return 2;
+  return 1;
+}
+function refreshVoices(){
+  if(synth) voices = synth.getVoices() || [];
+  refreshVoiceSelect();
+}
 if(synth){
   refreshVoices();
   if(typeof synth.addEventListener === 'function') synth.addEventListener('voiceschanged', refreshVoices);
@@ -797,19 +821,40 @@ if(synth){
 }
 function pickVoice(){
   const en = voices.filter(v => /^en[-_]?/i.test(v.lang || ''));
-  return en.find(v => /google us english/i.test(v.name))
-      || en.find(v => /en[-_]us/i.test(v.lang || ''))
-      || en.find(v => /aria|zira|samantha|karen|daniel/i.test(v.name))
-      || en[0] || null;
+  let saved = null; try{ saved = localStorage.getItem('sb_voice'); }catch(e){}
+  if(saved){ const hit = en.find(v => v.name === saved); if(hit) return hit; }
+  return en.slice().sort((a,b) => voiceRank(b) - voiceRank(a))[0] || null;
+}
+function refreshVoiceSelect(){
+  const sel = $('voice-select'); if(!sel) return;
+  const en = voices.filter(v => /^en[-_]?/i.test(v.lang || ''))
+                   .slice().sort((a,b) => voiceRank(b) - voiceRank(a));
+  sel.innerHTML = '';
+  en.forEach(v=>{
+    const o = document.createElement('option');
+    o.value = v.name;
+    o.textContent = v.name.replace(/^(microsoft|google)\s+/i,'') + ' (' + v.lang + ')';
+    sel.appendChild(o);
+  });
+  const cur = pickVoice(); if(cur) sel.value = cur.name;
+}
+function utter(text, rate){
+  const u = new SpeechSynthesisUtterance(text);
+  u.rate = rate || 1; u.pitch = 1; u.volume = 1;
+  const v = pickVoice(); if(v) u.voice = v;
+  synth.speak(u);
 }
 function say(text, rate){
   if(!synth || !text) return false;
+  try{ synth.cancel(); utter(text, rate); return true; }catch(e){ return false; }
+}
+function sayWordTwice(rate){
+  if(!synth) return false;
   try{
     synth.cancel();
-    const u = new SpeechSynthesisUtterance(text);
-    u.rate = rate || 1; u.pitch = 1; u.volume = 1;
-    const v = pickVoice(); if(v) u.voice = v;
-    synth.speak(u);
+    const twice = $('opt-twice') && $('opt-twice').checked;
+    utter(S.word, rate);
+    if(twice) utter(S.word, Math.max(0.5, rate*0.85));   // second listen, a touch slower
     return true;
   }catch(e){ return false; }
 }
@@ -912,7 +957,7 @@ function renderHearts(){
   for(let i=0;i<3;i++){
     const s=document.createElement('span');
     s.className='heart'+(i<S.lives?'':' lost');
-    s.textContent='❤';
+    s.innerHTML='<svg viewBox="0 0 24 24" width="27" height="25" aria-hidden="true"><path d="M12 21C10.2 19.2 3 14.8 3 9.3 3 6.4 5.4 4.4 7.9 4.4c1.7 0 3.3 1 4.1 2.4.8-1.4 2.4-2.4 4.1-2.4 2.5 0 4.9 2 4.9 4.9 0 5.5-7.2 9.9-9 11.7Z"/></svg>';
     h.appendChild(s);
   }
 }
@@ -1042,7 +1087,7 @@ function nextWord(){
   if(synth){
     setFeedback(S.mode==='duel' ? 'Hands on your buzzers — first to ring in, spells it.' : 'Listen carefully…','');
     startTimer();
-    setTimeout(()=>{ if(tok===S.session){ S.spoken=true; say(S.word, DIFF[S.diff].rate); } }, 450);
+    setTimeout(()=>{ if(tok===S.session){ S.spoken=true; sayWordTwice(DIFF[S.diff].rate); } }, 450);
   }else{
     // Fallback when the browser has no speech: flash the word briefly.
     setFeedback('No speech support — memorise it quick: <b class="reveal">'+S.word.toUpperCase()+'</b>','warn');
@@ -1313,16 +1358,16 @@ document.querySelectorAll('.tab').forEach(b =>
   b.addEventListener('click', ()=>setTab(b.dataset.tab)));
 
 $('btn-test-voice').addEventListener('click', ()=>{
-  if(!say('Hello! The bot is ready. Let us spell some words!', 0.95)) alert('Sorry — your browser does not support speech synthesis.');
+  if(!say('Hello! This is how I will say the words. Ready to spell?', 0.9)) alert('Sorry — your browser does not support speech synthesis.');
 });
 
 $('btn-repeat').addEventListener('click', ()=>{
   if(!S.playing) return;
-  if(synth) say(S.word, DIFF[S.diff].rate); else repeatFallback();
+  if(synth) sayWordTwice(DIFF[S.diff].rate); else repeatFallback();
 });
 $('btn-slow').addEventListener('click', ()=>{
   if(!S.playing) return;
-  if(synth) say(S.word, 0.6); else repeatFallback();
+  if(synth) sayWordTwice(0.55); else repeatFallback();
 });
 $('btn-define').addEventListener('click', ()=>{
   if(!S.playing) return;
@@ -1386,6 +1431,14 @@ renderRoster();
 setMode('solo');
 
 try{ $('name-input').value = localStorage.getItem('sb_name') || ''; }catch(e){}
+try{ $('opt-twice').checked = (localStorage.getItem('sb_twice') || '1') === '1'; }catch(e){}
+$('opt-twice').addEventListener('change', ()=>{
+  try{ localStorage.setItem('sb_twice', $('opt-twice').checked ? '1' : '0'); }catch(e){}
+});
+$('voice-select').addEventListener('change', ()=>{
+  try{ localStorage.setItem('sb_voice', $('voice-select').value); }catch(e){}
+  say('This is my new voice. Good luck!', 0.9);
+});
 setTab('easy');
 </script>
 </body>
