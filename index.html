@@ -1,0 +1,1392 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>The Spelling Bee</title>
+<style>
+  :root{
+    --paper:#f6f0e0; --panel:#fbf7ec; --ink:#26221a; --soft:#7a6f58;
+    --line:#ddd2b6; --red:#b6372a; --green:#2f6b4a; --ochre:#a87b16; --blue:#31567a;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{height:100%}
+  body{
+    font-family:Georgia,'Iowan Old Style','Palatino Linotype','Times New Roman',serif;
+    color:var(--ink); background:var(--paper);
+    display:flex; justify-content:center;
+    padding:34px 18px 70px; position:relative; overflow-x:hidden;
+  }
+  /* exercise-book ruled paper + red margin line */
+  body::before{
+    content:''; position:fixed; inset:0; z-index:-1; pointer-events:none;
+    background:repeating-linear-gradient(to bottom, transparent 0 31px, rgba(38,34,26,.045) 31px 32px);
+  }
+  body::after{
+    content:''; position:fixed; top:0; bottom:0; left:46px; width:2px; z-index:-1;
+    background:rgba(182,55,42,.28);
+  }
+  @media(max-width:700px){ body::after{display:none} }
+  ::selection{background:#f3d878}
+  #app{width:100%;max-width:760px;position:relative}
+  .screen{display:none;animation:fadeIn .35s ease}
+  .screen.active{display:block}
+  @keyframes fadeIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+  .hidden{display:none!important}
+
+  /* ---------- masthead ---------- */
+  .stamp{
+    position:absolute; top:-6px; right:2%;
+    transform:rotate(7deg);
+    border:3px double var(--red); color:var(--red); border-radius:999px;
+    padding:9px 16px; font-size:10.5px; font-weight:700;
+    letter-spacing:.24em; text-transform:uppercase; opacity:.85;
+  }
+  @media(max-width:640px){ .stamp{display:none} }
+  .logo{ text-align:center; font-size:54px; font-weight:700; letter-spacing:-1px; line-height:1.05; }
+  .logo em{font-style:italic; color:var(--red)}
+  .bee{width:44px; height:44px; vertical-align:-6px; margin-right:6px}
+  .squig{display:block; width:min(320px,74%); height:12px; margin:8px auto 10px}
+  .kicker{
+    text-align:center; font-size:10.5px; font-weight:700;
+    letter-spacing:.34em; text-transform:uppercase; color:var(--soft);
+  }
+  .tagline{text-align:center;font-style:italic;color:var(--soft);font-size:17px;margin:6px 0 28px}
+
+  /* ---------- panels ---------- */
+  .card{
+    background:var(--panel); border:1.5px solid var(--ink); border-radius:8px;
+    box-shadow:3px 3px 0 rgba(38,34,26,.15); padding:24px; margin-bottom:26px;
+  }
+  .section-title{
+    display:flex; align-items:center; gap:12px;
+    font-size:12px; font-weight:700; letter-spacing:.3em; text-transform:uppercase;
+    color:var(--soft); margin-bottom:14px;
+  }
+  .section-title::after{content:''; flex:1; height:1.5px; background:var(--line)}
+
+  .field-label{display:block;font-family:'Courier New',monospace;font-size:12px;letter-spacing:.06em;color:var(--soft);margin-bottom:2px}
+  #name-input{
+    width:100%; padding:6px 2px; font:inherit; font-size:19px; color:var(--ink);
+    background:transparent; border:0; border-bottom:2px solid var(--ink); outline:none; border-radius:0;
+  }
+  #name-input:focus{border-color:var(--red)}
+  .btn-voice-test{
+    margin-top:14px; padding:7px 16px; cursor:pointer; font:inherit; font-size:12px;
+    letter-spacing:.18em; text-transform:uppercase;
+    border:1.5px solid var(--ink); border-radius:999px; background:none; color:var(--ink);
+  }
+  .btn-voice-test:hover{background:var(--ink); color:var(--paper)}
+
+  .diff-row{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-top:6px}
+  .diff-card{
+    position:relative; overflow:hidden; text-align:left; font:inherit; cursor:pointer;
+    background:var(--paper); border:1.5px solid var(--ink); border-radius:8px;
+    padding:16px 14px 13px; box-shadow:3px 3px 0 rgba(38,34,26,.14);
+    transition:transform .12s, box-shadow .12s; color:var(--ink);
+  }
+  .diff-card::before{content:''; position:absolute; left:0; top:0; right:0; height:5px; background:var(--dc)}
+  .diff-card.easy{--dc:#2f6b4a}
+  .diff-card.medium{--dc:#c99a3a}
+  .diff-card.hard{--dc:#b6372a}
+  .diff-card:hover{transform:translateY(-3px); box-shadow:4px 5px 0 rgba(38,34,26,.2)}
+  .dc-name{display:block; font-size:22px; font-weight:700; margin-top:4px}
+  .dc-sub{display:block; font-size:12.5px; font-style:italic; color:var(--soft); margin-top:3px}
+  .dc-meta{display:block; margin-top:12px; font-family:'Courier New',monospace; font-size:12px}
+  .dc-pts{
+    position:absolute; top:12px; right:12px; padding:2px 8px;
+    border:1.5px solid var(--red); border-radius:4px; color:var(--red);
+    font-size:11px; font-weight:700; letter-spacing:.06em;
+  }
+  @media(max-width:560px){.diff-row{grid-template-columns:1fr}}
+
+  .hint-row{margin-top:16px;text-align:center;font-style:italic;color:var(--soft);font-size:14px}
+  .foot{text-align:center;font-family:'Courier New',monospace;font-size:11px;letter-spacing:.05em;color:var(--soft);margin-top:6px}
+
+  /* ---------- tabs + leaderboard ---------- */
+  .tabs{display:flex;gap:20px;border-bottom:1.5px solid var(--ink);margin-bottom:10px}
+  .tab{
+    background:none; border:0; cursor:pointer; font:inherit; font-size:12.5px;
+    letter-spacing:.2em; text-transform:uppercase; color:var(--soft);
+    padding:6px 2px 9px; position:relative;
+  }
+  .tab.active{color:var(--ink); font-weight:700}
+  .tab.active::after{content:''; position:absolute; left:0; right:0; bottom:-1.5px; height:3px; background:var(--red)}
+
+  .board{list-style:none}
+  .board li{display:flex; align-items:baseline; gap:10px; padding:7px 6px; font-size:16px; border-radius:3px}
+  .board li.me{background:rgba(243,216,120,.5)}
+  .board .rk{font-family:'Courier New',monospace; font-size:12px; color:var(--soft); min-width:24px}
+  .board li:nth-child(-n+3) .rk{color:var(--red); font-weight:700}
+  .board .nm{font-weight:700; overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
+  .board .lead{flex:1; border-bottom:2px dotted var(--line); transform:translateY(-4px); min-width:20px}
+  .board .dt{font-family:'Courier New',monospace; font-size:11px; color:var(--soft); white-space:nowrap}
+  .board .sc{font-weight:700; font-size:17px; min-width:60px; text-align:right}
+  .board li.empty{display:block; text-align:center; font-style:italic; color:var(--soft); padding:16px}
+
+  /* ---------- game HUD ---------- */
+  .hud{display:flex; justify-content:space-between; align-items:flex-start; gap:10px; margin-bottom:14px; flex-wrap:wrap}
+  .hearts{font-size:24px; letter-spacing:6px; line-height:1}
+  .heart{display:inline-block; transition:all .35s; color:var(--red)}
+  .heart.lost{color:var(--line); transform:scale(.85)}
+  .best-line{color:var(--soft); font-style:italic; font-size:13.5px; margin-top:8px}
+  .hud-right{display:flex; gap:14px; align-items:center; flex-wrap:wrap}
+  .streak-box{
+    transform:rotate(-2deg); padding:6px 11px;
+    border:2px solid var(--red); border-radius:4px; background:rgba(182,55,42,.05);
+    color:var(--red); font-weight:700; font-size:13px;
+  }
+  #combo{color:var(--ochre)}
+  .score-box{
+    position:relative; min-width:112px; text-align:center;
+    background:var(--panel); border:1.5px solid var(--ink); border-radius:6px;
+    padding:6px 14px 8px; box-shadow:3px 3px 0 rgba(38,34,26,.12);
+  }
+  .score-box .lbl{display:block; font-size:9px; font-weight:700; letter-spacing:.32em; text-transform:uppercase; color:var(--soft)}
+  #score{font-size:24px; font-weight:700}
+  .score-box.pop{animation:pop .35s}
+  @keyframes pop{50%{transform:scale(1.12)}}
+  .float-pts{
+    position:absolute; right:10px; top:-6px; color:var(--green);
+    font-style:italic; font-weight:700; font-size:15px;
+    animation:rise 1s ease-out forwards; pointer-events:none;
+  }
+  @keyframes rise{to{transform:translateY(-30px); opacity:0}}
+  #record-flash{
+    transform:rotate(-2deg); padding:6px 12px;
+    border:2px solid var(--red); border-radius:4px; color:var(--red);
+    font-weight:700; font-size:11.5px; letter-spacing:.2em; text-transform:uppercase;
+    animation:blink .5s infinite alternate;
+  }
+  @keyframes blink{to{opacity:.5}}
+
+  .timer-wrap{position:relative; height:15px; background:var(--panel); border:1.5px solid var(--ink); border-radius:99px; overflow:hidden; margin-bottom:18px}
+  #timer-bar{height:100%; width:100%; transition:width .1s linear}
+  #timer-bar.t-ok{background:#57876a}
+  #timer-bar.t-mid{background:#c99a3a}
+  #timer-bar.t-low{background:var(--red); animation:pulse .55s infinite alternate}
+  @keyframes pulse{to{opacity:.55}}
+  #timer-text{
+    position:absolute; right:10px; top:0; line-height:14px;
+    font-family:'Courier New',monospace; font-size:10px; font-weight:700; color:var(--ink);
+  }
+
+  /* ---------- game card ---------- */
+  .game-card{text-align:center}
+  .word-meta{
+    display:flex; justify-content:center; align-items:center; gap:12px;
+    font-size:10.5px; font-weight:700; letter-spacing:.3em; text-transform:uppercase; color:var(--soft);
+  }
+  .pill.easy{color:var(--green)} .pill.medium{color:var(--ochre)} .pill.hard{color:var(--red)}
+  .say-kicker{margin:16px 0 0; font-size:9.5px; font-weight:700; letter-spacing:.34em; text-transform:uppercase; color:var(--soft)}
+  .bot-line{font-style:italic; font-size:20px; margin:2px 0 12px}
+  .feedback{
+    min-height:58px; font-size:17.5px; display:flex; align-items:center; justify-content:center;
+    flex-wrap:wrap; gap:4px; margin-bottom:12px;
+  }
+  .feedback.good{color:var(--green)}
+  .feedback.bad{color:var(--red)}
+  .feedback.warn{color:var(--ochre)}
+  .feedback i{color:var(--soft)}
+  .feedback b.reveal{letter-spacing:2.5px; border-bottom:2px dotted currentColor; font-size:19px}
+  .feedback .def{display:block; width:100%; font-size:13px; font-style:italic; color:var(--soft)}
+
+  #answer-form{display:flex; gap:14px; align-items:flex-end}
+  #answer-input{
+    flex:1; min-width:0; font-family:'Courier New',monospace; font-size:26px; letter-spacing:6px;
+    text-transform:uppercase; text-align:center; color:var(--ink);
+    background:transparent; border:0; border-bottom:2.5px solid var(--ink); border-radius:0;
+    padding:10px 8px 8px; outline:none; transition:background .2s, border-color .2s;
+  }
+  #answer-input::placeholder{color:#b9ad90; font-family:Georgia,serif; font-style:italic; font-size:17px; letter-spacing:1px; text-transform:none}
+  #answer-input:focus{border-color:var(--red); background:rgba(243,216,120,.16)}
+  #answer-input:disabled{opacity:.45}
+  #btn-submit{
+    padding:12px 20px; cursor:pointer; white-space:nowrap;
+    background:var(--red); color:#f9f3e3;
+    border:1.5px solid var(--ink); border-radius:6px;
+    font:inherit; font-weight:700; font-size:16px; letter-spacing:.04em;
+    box-shadow:3px 3px 0 rgba(38,34,26,.25);
+  }
+  #btn-submit:hover{transform:translate(-1px,-1px); box-shadow:4px 4px 0 rgba(38,34,26,.3)}
+  #btn-submit:active{transform:translate(1px,1px); box-shadow:1px 1px 0 rgba(38,34,26,.3)}
+  .kbd{
+    font-family:'Courier New',monospace; font-size:10px; text-transform:uppercase;
+    border:1px solid rgba(249,243,227,.75); border-radius:3px; padding:1px 5px; margin-left:8px;
+  }
+  @media(max-width:520px){#answer-form{flex-direction:column; align-items:stretch}}
+
+  .audio-row{display:flex; gap:18px; justify-content:center; margin-top:16px; flex-wrap:wrap}
+  .audio-row button{
+    background:none; border:0; border-bottom:1.5px solid var(--line); border-radius:0;
+    font:inherit; font-style:italic; font-size:14.5px; color:var(--soft);
+    cursor:pointer; padding:2px 1px;
+  }
+  .audio-row button:hover{color:var(--ink); border-color:var(--ink)}
+  #btn-quit{color:var(--red)}
+
+  .shake{animation:shake .4s}
+  @keyframes shake{20%{transform:translateX(-7px)}40%{transform:translateX(6px)}60%{transform:translateX(-4px)}80%{transform:translateX(3px)}}
+
+  .cf{position:fixed; width:8px; height:13px; border-radius:1px; pointer-events:none; z-index:99; animation:cfly 1s ease-out forwards}
+  @keyframes cfly{to{transform:translate(var(--tx),var(--ty)) rotate(var(--rot)); opacity:0}}
+
+  /* ---------- report card ---------- */
+  #screen-over{text-align:center}
+  #over-title{
+    display:inline-block; transform:rotate(-2.5deg); margin:8px auto 16px;
+    border:3px double var(--red); border-radius:10px; color:var(--red);
+    padding:10px 26px; font-size:29px; font-weight:700; letter-spacing:.04em;
+    background:rgba(182,55,42,.04);
+  }
+  .record-wrap{text-align:center; margin-bottom:14px}
+  .new-record{
+    display:inline-block; color:var(--red); font-weight:700;
+    font-size:11.5px; letter-spacing:.28em; text-transform:uppercase;
+  }
+  .over-card{text-align:left}
+  .final-score-big{font-size:72px; font-weight:700; line-height:1; text-align:center}
+  .final-label{text-align:center; font-size:10px; font-weight:700; letter-spacing:.34em; text-transform:uppercase; color:var(--soft); margin:6px 0 20px}
+  .stats-grid{
+    display:grid; grid-template-columns:repeat(4,1fr);
+    border-top:2px solid var(--ink); border-bottom:2px solid var(--ink); margin:0 0 20px;
+  }
+  @media(max-width:520px){.stats-grid{grid-template-columns:repeat(2,1fr)} .stat{border-right:0!important}}
+  .stat{padding:12px 6px; border-right:1px solid var(--line); text-align:center}
+  .stat:last-child{border-right:0}
+  .stat .v{font-size:22px; font-weight:700}
+  .stat .k{font-size:9px; font-weight:700; letter-spacing:.2em; text-transform:uppercase; color:var(--soft); margin-top:4px}
+  #review-title{margin-bottom:6px}
+  #review-box{
+    list-style:none; text-align:left; max-height:150px; overflow:auto;
+    border-top:1.5px dashed var(--line); border-bottom:1.5px dashed var(--line);
+    padding:8px 4px; font-size:14px; margin-bottom:20px;
+  }
+  #review-box li{margin:6px 0; color:var(--soft); font-style:italic}
+  #review-box b{color:var(--ink); font-style:normal; letter-spacing:1.5px}
+  .over-actions{display:flex; gap:12px; justify-content:center; margin-top:20px; flex-wrap:wrap}
+  .over-actions button{
+    padding:11px 20px; border-radius:6px; font:inherit; font-weight:700; font-size:15px;
+    letter-spacing:.04em; cursor:pointer;
+  }
+  #btn-again{background:var(--red); color:#f9f3e3; border:1.5px solid var(--ink); box-shadow:3px 3px 0 rgba(38,34,26,.25)}
+  #btn-menu{background:none; color:var(--ink); border:1.5px solid var(--ink)!important}
+  /* ---------- mode & duel ---------- */
+  .mode-tabs{display:inline-flex; border:1.5px solid var(--ink); border-radius:999px; overflow:hidden; margin-bottom:18px}
+  .mode-tab{background:none; border:0; font:inherit; font-size:11.5px; font-weight:700; letter-spacing:.16em; text-transform:uppercase; padding:9px 18px; cursor:pointer; color:var(--soft)}
+  .mode-tab.active{background:var(--ink); color:var(--paper)}
+  #duel-setup .field-label{margin-bottom:8px}
+  .prow{display:flex; align-items:center; gap:10px; margin-bottom:9px}
+  .pkey{
+    flex:0 0 auto; width:30px; height:26px; display:inline-flex; align-items:center; justify-content:center;
+    font-family:'Courier New',monospace; font-weight:700; font-size:13px;
+    background:var(--pc); color:#f9f3e3; border:1.5px solid var(--ink); border-radius:5px;
+  }
+  .prow input{
+    flex:1; font:inherit; font-size:16px; color:var(--ink); background:transparent;
+    border:0; border-bottom:1.5px solid var(--line); border-radius:0; outline:none; padding:4px 2px;
+  }
+  .prow input:focus{border-color:var(--pc, var(--ink))}
+  .premove{background:none; border:0; color:var(--red); font:inherit; font-weight:700; font-size:15px; cursor:pointer; padding:0 4px}
+  .premove:disabled{color:var(--line); cursor:default}
+  .players{display:flex; gap:8px; flex-wrap:wrap; margin-top:4px}
+  .pchip{
+    display:inline-flex; align-items:center; gap:7px; padding:5px 10px;
+    border:1.5px solid var(--ink); border-radius:6px; background:var(--panel);
+    font-size:13px; font-weight:700; box-shadow:2px 2px 0 rgba(38,34,26,.12);
+    transition:transform .15s, background .15s, opacity .2s;
+  }
+  .pchip .pdot{width:9px; height:9px; border-radius:50%; background:var(--pc); border:1px solid var(--ink)}
+  .pchip .pkey-mini{font-family:'Courier New',monospace; font-size:10px; color:var(--soft); border:1.5px solid var(--line); border-radius:3px; padding:0 4px}
+  .pchip.active{transform:rotate(-1.5deg); border-color:var(--pc); background:#fbf3d5}
+  .pchip.out{opacity:.4}
+  .pchip.out .pnm{text-decoration:line-through}
+  #standings .nm{color:inherit}
+</style>
+</head>
+<body>
+<main id="app">
+
+  <!-- ============ START ============ -->
+  <section id="screen-start" class="screen active">
+    <div class="stamp">3 lives · no mercy</div>
+    <h1 class="logo"><svg class="bee" viewBox="0 0 44 44" aria-hidden="true"><ellipse cx="15" cy="12" rx="8" ry="5" fill="#fbf7ec" stroke="#26221a" stroke-width="1.6" transform="rotate(-28 15 12)"/><ellipse cx="29" cy="12" rx="8" ry="5" fill="#fbf7ec" stroke="#26221a" stroke-width="1.6" transform="rotate(28 29 12)"/><ellipse cx="22" cy="27" rx="9.5" ry="11" fill="#c99a3a" stroke="#26221a" stroke-width="1.6"/><path d="M13.5 22h17M12.8 28h18.4M14.5 34h15" stroke="#26221a" stroke-width="3"/><circle cx="22" cy="17" r="5.5" fill="#26221a"/><path d="M22 38l-1.5 4 3-1z" fill="#26221a"/></svg>The Spelling <em>Bee</em></h1>
+    <svg class="squig" viewBox="0 0 240 12" preserveAspectRatio="none" aria-hidden="true"><path d="M2 8 Q 22 2 42 7 T 82 7 T 122 7 T 162 7 T 202 7 T 238 6" fill="none" stroke="#b6372a" stroke-width="3" stroke-linecap="round"/></svg>
+    <p class="kicker">a game of orthography · 341 words</p>
+    <p class="tagline">The bot says the word — you spell it. Three lives. How far can you go?</p>
+
+    <div class="card">
+      <div class="mode-tabs">
+        <button type="button" id="tab-solo" class="mode-tab active">solo quest</button>
+        <button type="button" id="tab-duel" class="mode-tab">duel · 2–5 players</button>
+      </div>
+      <div id="solo-setup">
+        <label class="field-label" for="name-input">contestant name — for the leaderboard</label>
+        <input id="name-input" maxlength="16" placeholder="e.g. Alex" autocomplete="off">
+      </div>
+      <div id="duel-setup" class="hidden">
+        <div class="field-label">each player gets a buzzer key on this keyboard</div>
+        <div id="player-rows"></div>
+        <button type="button" id="btn-add-player" class="btn-voice-test">+ add a player</button>
+        <div class="hint-row">First to ring in gets the mic — the faster you ring, the more a correct spelling is worth. A miss costs 20 points and reopens the word to the others.</div>
+      </div>
+      <button type="button" class="btn-voice-test" id="btn-test-voice">test your speaker</button>
+
+      <div class="section-title" style="margin-top:22px">Choose your difficulty</div>
+      <div class="diff-row">
+        <button class="diff-card easy" data-diff="easy"><span class="dc-pts">points ×1</span><span class="dc-name">Easy</span><span class="dc-sub">3–7 letters · 117 words</span><span class="dc-meta">30 seconds per word</span></button>
+        <button class="diff-card medium" data-diff="medium"><span class="dc-pts">points ×1.5</span><span class="dc-name">Medium</span><span class="dc-sub">everyday English · 106 words</span><span class="dc-meta">25 seconds per word</span></button>
+        <button class="diff-card hard" data-diff="hard"><span class="dc-pts">points ×2</span><span class="dc-name">Hard</span><span class="dc-sub">spelling-bee brutal · 118 words</span><span class="dc-meta">20 seconds per word</span></button>
+      </div>
+      <div class="hint-row">Spell fast and keep a streak going for combo multipliers. <b>Repeat</b>, <b>Slower</b>, <b>Meaning</b> and <b>Sentence</b> are free — but the clock keeps ticking.</div>
+    </div>
+
+    <div class="card">
+      <div class="section-title">The leaderboard</div>
+      <div class="tabs">
+        <button class="tab active" data-tab="easy">Easy</button>
+        <button class="tab" data-tab="medium">Medium</button>
+        <button class="tab" data-tab="hard">Hard</button>
+      </div>
+      <ol id="board-start" class="board"></ol>
+    </div>
+
+    <p class="foot">works offline · scores live in this browser only</p>
+  </section>
+
+  <!-- ============ GAME ============ -->
+  <section id="screen-game" class="screen">
+    <header class="hud">
+      <div class="hud-left">
+        <div id="hearts" class="hearts" aria-label="lives"></div>
+        <div id="players" class="players hidden"></div>
+        <div id="best-line" class="best-line"></div>
+      </div>
+      <div class="hud-right">
+        <div id="record-flash" class="hidden">New record!</div>
+        <div id="streak-box" class="streak-box hidden">streak <span id="streak-count">0</span> · <span id="combo">×1.0</span></div>
+        <div id="score-box" class="score-box"><span class="lbl">score</span><span id="score">0</span></div>
+      </div>
+    </header>
+
+    <div class="timer-wrap"><div id="timer-bar" class="t-ok"></div><span id="timer-text">30s</span></div>
+
+    <div class="card game-card">
+      <div class="word-meta">
+        <span id="diff-pill" class="pill medium">MEDIUM</span>
+        <span id="word-num">Word 1</span>
+      </div>
+      <div class="say-kicker">The bee says</div>
+      <div class="bot-line" id="bot-say">Listen…</div>
+      <div id="feedback" class="feedback" aria-live="polite"></div>
+      <form id="answer-form" autocomplete="off">
+        <input id="answer-input" maxlength="40" placeholder="Type what you hear…" autocomplete="off" spellcheck="false">
+        <button id="btn-submit" type="submit">Spell it<span class="kbd">↵ enter</span></button>
+      </form>
+      <div class="audio-row">
+        <button type="button" id="btn-repeat">repeat it</button>
+        <button type="button" id="btn-slow">slower, please</button>
+        <button type="button" id="btn-define">meaning</button>
+        <button type="button" id="btn-sentence">use it in a sentence</button>
+        <button type="button" id="btn-quit">give up</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ GAME OVER ============ -->
+  <section id="screen-over" class="screen">
+    <h1 id="over-title">Game over!</h1>
+    <div class="record-wrap"><span id="new-record" class="new-record hidden">✷ new personal best ✷</span></div>
+    <div class="card over-card">
+      <div class="final-score-big" id="final-score">0</div>
+      <div class="final-label" id="final-label">final score</div>
+      <div class="stats-grid" id="stats-grid"></div>
+      <div id="review-title" class="section-title hidden">Words to review</div>
+      <ul id="review-box" class="hidden"></ul>
+      <div id="standings-title" class="section-title hidden">Final standings</div>
+      <ol id="standings" class="board hidden"></ol>
+      <div id="lb-title" class="section-title" style="margin-top:16px">Top scores · <span id="over-diff">hard</span></div>
+      <ol id="board-over" class="board"></ol>
+      <div class="over-actions">
+        <button id="btn-again" type="button">↻ Play again</button>
+        <button id="btn-menu" type="button">☰ Change difficulty</button>
+      </div>
+    </div>
+  </section>
+
+</main>
+
+<script>
+'use strict';
+
+/* ================= Word bank: [word, definition, example sentence] ================= */
+const WORDS = {
+  easy: [
+    ["cat","a small furry pet that purrs and hunts mice","The cat slept on the sunny windowsill."],
+    ["dog","a loyal pet animal that barks","My dog greets me at the door every day."],
+    ["sun","the bright star that lights up our daytime sky","The sun rises in the east."],
+    ["hat","a covering you wear on your head","He wore a hat to shield his face from the glare."],
+    ["map","a drawing that shows roads, towns, and land","We used a map to find the hiking trail."],
+    ["cup","a small open container for drinking","She poured tea into her favorite cup."],
+    ["bed","a piece of furniture you sleep on","The puppy likes to sleep on my bed."],
+    ["pen","a tool that writes with ink","Please sign your name with a pen."],
+    ["box","a container with flat sides and a lid","The kitten hid inside a cardboard box."],
+    ["bus","a big road vehicle that carries many passengers","I ride the bus to school every morning."],
+    ["fish","an animal that lives in water and has fins","A rainbow trout is a beautiful fish."],
+    ["bird","an animal with feathers and wings","A little bird built a nest on the porch."],
+    ["tree","a tall plant with a wooden trunk and branches","The old oak tree gives us shade in summer."],
+    ["book","pages with words bound together to read","She read the whole book in one sitting."],
+    ["moon","the bright object that shines in the night sky","The moon glows brightly tonight."],
+    ["star","a huge ball of burning gas seen as a point of light","We saw a shooting star last night."],
+    ["rain","water that falls from clouds","The rain filled up the garden buckets."],
+    ["snow","soft white flakes of frozen water","Fresh snow covered the mountains."],
+    ["cake","a sweet baked dessert, often with frosting","Grandma baked a chocolate cake."],
+    ["milk","a white drink that comes from cows","He drinks a glass of milk with breakfast."],
+    ["frog","a small hopping animal that lives near water","A green frog sat on the lily pad."],
+    ["hand","the body part at the end of your arm","Raise your hand if you know the answer."],
+    ["jump","to push yourself up into the air","The rabbit can jump over the fence."],
+    ["king","a man who rules a country","The king ruled the kingdom kindly."],
+    ["lion","a big wild cat with a shaggy mane","The lion roared across the savanna."],
+    ["nest","a home that a bird builds","The bird returned to its nest at dusk."],
+    ["ship","a very large boat","The ship sailed across the calm sea."],
+    ["farm","land where crops are grown and animals are raised","We picked apples at the farm."],
+    ["duck","a water bird with a flat bill","A duck paddled across the pond."],
+    ["corn","a tall grain plant with yellow kernels","The field was full of tall corn."],
+    ["ring","a small band of metal worn on a finger","She wore a silver ring on her finger."],
+    ["sock","a soft garment worn on a foot","I lost one sock in the laundry."],
+    ["kite","a light frame that flies on the end of a string","The kite danced in the windy sky."],
+    ["boat","a small vessel that travels on water","The boat bobbed gently on the waves."],
+    ["leaf","the flat green part of a plant","A red leaf drifted to the ground."],
+    ["wave","a moving ridge of water in the sea","Each wave washed shells onto the beach."],
+    ["drum","a round instrument you beat with sticks","He beat the drum with both sticks."],
+    ["clown","a performer dressed funnily to make people laugh","A funny clown juggled at the fair."],
+    ["bread","a baked food made from flour","The bakery sells fresh bread."],
+    ["chair","a seat with a back, for one person","Please sit in this comfy chair."],
+    ["ghost","the spirit of a dead person in stories","The story is about a friendly ghost."],
+    ["plant","a living thing that grows in soil","Water the plant twice a week."],
+    ["smile","a happy expression that turns your lips up","Her smile brightened the whole room."],
+    ["tiger","a large wild cat with orange and black stripes","The tiger prowled through the tall grass."],
+    ["ant","a tiny insect that lives in large groups","The ant carried a crumb twice its size."],
+    ["apple","a round red or green fruit","She bit into a crisp apple."],
+    ["ball","a round object used in games and sports","He kicked the ball over the fence."],
+    ["banana","a long curved yellow fruit","A banana is a great snack before practice."],
+    ["barn","a farm building for animals and hay","Owls nested in the red barn."],
+    ["bath","a wash you take in a tub of water","The muddy dog needed a bath."],
+    ["beach","a sandy shore beside the sea","We built sandcastles at the beach."],
+    ["bear","a big, strong wild animal with thick fur","The bear caught a fish in the river."],
+    ["bee","a buzzing insect that makes honey","A bee buzzed from flower to flower."],
+    ["bell","a hollow metal object that rings","The school bell rang at noon."],
+    ["bike","a two-wheeled ride you pedal","She rides her bike to the park."],
+    ["bone","the hard white part inside a body","The dog buried a bone in the yard."],
+    ["boot","a heavy shoe that covers the ankle","Each boot was caked with mud."],
+    ["brush","a tool with bristles for hair or paint","He painted the fence with a wide brush."],
+    ["bug","a small crawling insect","A shiny bug crawled across the path."],
+    ["bunny","a pet name for a young rabbit","The bunny nibbled clover in the meadow."],
+    ["candy","sweet sugary treats","The piñata burst and rained candy."],
+    ["carrot","a long orange root vegetable","She pulled a carrot from the garden."],
+    ["cheese","a food made from milk","The mouse stole a piece of cheese."],
+    ["cherry","a small round red fruit with a pit in the middle","He topped the sundae with a cherry."],
+    ["cloud","a white or gray mass floating in the sky","A fluffy cloud drifted overhead."],
+    ["coat","a warm outer garment with sleeves","Hang your wet coat by the door."],
+    ["coin","a flat round piece of money","She flipped a coin to decide."],
+    ["cookie","a small sweet flat baked treat","He dunked a warm cookie in milk."],
+    ["cow","a large farm animal that gives milk","The cow mooed at milking time."],
+    ["crayon","a stick of colored wax for drawing","She colored the sun with a yellow crayon."],
+    ["crown","a royal head covering","The queen placed the crown on her head."],
+    ["doll","a small figure shaped like a person, for play","Grandma sewed a dress for her doll."],
+    ["door","a panel that opens an entrance","Someone knocked on the front door."],
+    ["egg","an oval object laid by birds","The hen laid an egg this morning."],
+    ["eye","the organ of the body that sees","She winked her left eye."],
+    ["fire","burning flames that give heat and light","We gathered around the crackling fire."],
+    ["flower","the colorful blossom of a plant","She picked a flower for her mother."],
+    ["fox","a wild animal with red fur and a bushy tail","The sly fox slipped past the henhouse."],
+    ["game","an activity played with rules","Let's play a game of cards."],
+    ["gift","a present given to someone","She unwrapped her birthday gift."],
+    ["goat","a farm animal that climbs and eats almost anything","The goat nibbled the laundry on the line."],
+    ["grape","a small round fruit that grows in bunches","He popped a grape in his mouth."],
+    ["guitar","a stringed instrument you strum","Dad played the guitar by the campfire."],
+    ["hair","the strands that grow on your head","She tied her hair in a ponytail."],
+    ["home","the place where you live","There is no place like home."],
+    ["honey","a sweet sticky food made by bees","The bear cub raided the honey tree."],
+    ["horse","a large animal that people ride","She groomed the horse before the ride."],
+    ["house","a building where a family lives","Their house has a red front door."],
+    ["juice","a drink squeezed from fruit","He squeezed fresh juice from oranges."],
+    ["key","a small metal tool that opens a lock","She lost her house key again."],
+    ["lamp","a device that produces light","He reads under the warm lamp each night."],
+    ["lemon","a sour yellow fruit","Sour lemon puckered her whole face."],
+    ["light","the brightness that lets us see","Morning light spilled through the curtains."],
+    ["mouse","a small rodent with a long tail","The cat chased a mouse under the stairs."],
+    ["music","arranged sounds that are pleasant to hear","Soft music played during dinner."],
+    ["night","the dark time between sunset and sunrise","Owls hunt at night."],
+    ["nose","the part of the face you smell with","The detective had a keen nose for trouble."],
+    ["paper","thin material for writing on","Fold the paper into a plane."],
+    ["pig","a pink farm animal with a snout","The pig rolled happily in the mud."],
+    ["pizza","a flat baked dish topped with cheese and sauce","We ordered a pizza for movie night."],
+    ["rabbit","a long-eared animal that hops","The rabbit vanished into its burrow."],
+    ["rose","a fragrant flower with thorns on its stem","He gave her a single red rose."],
+    ["sand","tiny loose grains of rock found on shores","Warm sand squished between her toes."],
+    ["seed","the small thing a plant grows from","Plant a seed and watch it sprout."],
+    ["sheep","a woolly farm animal","Count the woolly sheep in the meadow."],
+    ["shoe","a covering for a foot","He tied his shoe before the race."],
+    ["spoon","a utensil with a small bowl, for eating or stirring","Stir the soup with a spoon."],
+    ["tail","the rear appendage of an animal","The dog wagged its excited tail."],
+    ["tea","a hot drink made from dried leaves","Grandma sips herbal tea every evening."],
+    ["tent","a portable shelter made of fabric","We pitched the tent beside the lake."],
+    ["turtle","a slow reptile with a shell","The turtle sunbathed on a log."],
+    ["water","the clear liquid we drink","Drink plenty of water on hot days."],
+    ["whale","the largest animal in the ocean","A whale spouted spray off the coast."],
+    ["wheel","a round part that turns to move a vehicle","The squeaky wheel needs oil."],
+    ["wind","moving air","The wind rattled the old shutters."],
+    ["wolf","a wild hunter that lives in packs","The wolf howled at the moon."],
+    ["zebra","an African animal with black and white stripes","The zebra grazed beside the giraffes."]
+  ],
+  medium: [
+    ["because","for the reason that","I smiled because you were here."],
+    ["friend","a person you know well and like","A true friend is always there for you."],
+    ["school","a place where children learn","The school bus arrives at eight."],
+    ["garden","a plot where flowers or vegetables grow","Tomatoes grow best in a sunny garden."],
+    ["window","an opening in a wall, fitted with glass","Rain tapped gently on the window."],
+    ["orange","a round citrus fruit","She peeled a juicy orange."],
+    ["purple","a color made by mixing red and blue","The sunset turned the sky purple."],
+    ["monkey","a playful animal that climbs trees","A monkey swung through the trees."],
+    ["kitchen","the room where food is cooked","The kitchen smelled like fresh cookies."],
+    ["holiday","a special day of celebration or rest","We go to the beach every summer holiday."],
+    ["picture","an image made with paint or a camera","She hung the picture above the fireplace."],
+    ["village","a small community in the countryside","A quiet village sat in the valley."],
+    ["journey","a trip from one place to another","The train journey took three hours."],
+    ["library","a building full of books to borrow","I borrowed three books from the library."],
+    ["penguin","a flightless sea bird in a tuxedo-like coat","A penguin waddled across the ice."],
+    ["morning","the early part of the day","Birds sing in the early morning."],
+    ["weather","the state of the air, like rain, wind, or shine","The weather turned cold overnight."],
+    ["birthday","the yearly date you were born","She blew out the birthday candles."],
+    ["diamond","the hardest and most brilliant gemstone","The ring sparkled with a tiny diamond."],
+    ["thunder","the loud crash that follows lightning","Thunder rumbled in the distance."],
+    ["whisper","to speak very softly","They shared a secret in a whisper."],
+    ["curious","eager to learn or know things","The curious kitten explored every box."],
+    ["dolphin","a clever ocean mammal that clicks and whistles","A dolphin leaped beside the boat."],
+    ["treasure","valuables such as gold and jewels","The map led to buried treasure."],
+    ["monster","a scary imaginary creature","Under the bed slept a friendly monster."],
+    ["puddle","a small pool of water on the ground","He jumped over every puddle on the path."],
+    ["blanket","a warm cover for a bed","She wrapped the cold puppy in a blanket."],
+    ["chimney","the pipe on a roof that lets smoke out","Smoke curled from the brick chimney."],
+    ["castle","a huge fortified home of kings and queens","The knight returned to the stone castle."],
+    ["planet","a large world that orbits a star","Mars is the fourth planet from the sun."],
+    ["wonder","a feeling of amazement","The child stared at the stars in wonder."],
+    ["elephant","the largest land animal, with a trunk","An elephant sprayed water with its trunk."],
+    ["balloon","a rubber bag inflated for parties","A red balloon floated over the fair."],
+    ["dinner","the main meal of the evening","The whole family gathered for dinner."],
+    ["pillow","a soft cushion for your head","She fluffed her pillow before sleeping."],
+    ["butterfly","an insect with large colorful wings","A butterfly landed on the flower."],
+    ["candle","a stick of wax with a burning wick","A single candle lit the dark room."],
+    ["ladder","a frame of steps for climbing","He climbed the ladder to fix the roof."],
+    ["pocket","a small pouch sewn into clothing","The keys are in my jacket pocket."],
+    ["rocket","a vehicle that blasts into space","The rocket blasted off into space."],
+    ["spider","a creature with eight legs that spins webs","A spider spun a web by the porch light."],
+    ["stadium","a huge arena for sports and concerts","The stadium roared when the goal was scored."],
+    ["vegetable","an edible plant, like a pea or a beet","Eat a green vegetable with every meal."],
+    ["yesterday","the day before today","It rained all day yesterday."],
+    ["wonderful","extremely good or amazing","We had a wonderful time at the zoo."],
+    ["adventure","an exciting and risky experience","Hiking the trail was a real adventure."],
+    ["animal","any living creature that is not a plant","The shelter found a home for every animal."],
+    ["autumn","the season when leaves fall","Autumn paints the maple leaves red."],
+    ["basket","a woven container with a handle","She carried the picnic basket down the hill."],
+    ["bedroom","the room where you sleep","He tidied his bedroom before dinner."],
+    ["bicycle","a pedal-powered vehicle with two wheels","They repaired the rusty bicycle together."],
+    ["brave","showing courage when afraid","It was brave of her to speak first."],
+    ["breakfast","the first meal of the day","Pancakes are his favorite breakfast."],
+    ["bridge","a structure that carries a road over water","The train rumbled across the iron bridge."],
+    ["brother","a boy or man with the same parents as you","My little brother hides the TV remote."],
+    ["bucket","an open container with a handle, for carrying","He hauled a bucket of water from the well."],
+    ["camera","a device that takes photographs","She packed her camera for the trip."],
+    ["captain","the leader of a ship or a team","The captain steered the ship through the storm."],
+    ["chicken","a farm bird kept for eggs and meat","A chicken crossed the farmyard road."],
+    ["chocolate","a sweet made from roasted cacao beans","They melted chocolate for the fondue."],
+    ["clothes","the garments you wear","Fold the clean clothes before bed."],
+    ["coconut","a large tropical nut with white flesh inside","They cracked open a coconut on the beach."],
+    ["computer","an electronic machine that processes information","The old computer hums all night."],
+    ["country","a nation with its own land and government","Switzerland is a beautiful mountain country."],
+    ["cousin","the child of your aunt or uncle","My cousin visits every summer."],
+    ["crocodile","a huge reptile with a long snout that lurks in rivers","The crocodile slid silently into the river."],
+    ["doctor","a person who treats the sick","The doctor listened to his heartbeat."],
+    ["dragon","a mythical beast that breathes fire","Legends tell of a dragon guarding gold."],
+    ["eagle","a majestic bird of prey","An eagle circled high above the valley."],
+    ["earth","the world we live on","Rain soaked the dry earth."],
+    ["family","parents and children together","The whole family gathers on Sundays."],
+    ["feather","the light structure that covers a bird","A single feather drifted from the sparrow."],
+    ["festival","a big public celebration","Lanterns lit up the spring festival."],
+    ["forest","a large area covered with trees","They camped deep in the pine forest."],
+    ["fountain","a structure that sprays water for show","Coins glittered at the bottom of the fountain."],
+    ["hamster","a small furry rodent kept as a pet","Her hamster runs on its wheel all night."],
+    ["helmet","a hard hat that protects your head","Always wear a helmet when cycling."],
+    ["history","the story of past events","The museum is full of local history."],
+    ["hobby","an activity you enjoy in your free time","Stamp collecting became his favorite hobby."],
+    ["hospital","a place where sick people are treated","The nurse waved as she left the hospital."],
+    ["insect","a small creature with six legs","A glowing insect landed on the tent."],
+    ["jungle","dense wild tropical forest","Monkeys chattered in the steamy jungle."],
+    ["kangaroo","an Australian animal that hops, carrying its young in a pouch","The kangaroo boxed playfully with its joey."],
+    ["mountain","a very tall, steep landform","Snow caps the mountain all year."],
+    ["museum","a place where old and precious things are shown","We saw dinosaur bones at the museum."],
+    ["mushroom","a fungus with a cap and a stem","The mushroom soup was creamy and rich."],
+    ["octopus","a sea creature with eight arms","The octopus squeezed through a tiny gap."],
+    ["parrot","a colorful tropical bird that can copy speech","The pirate's parrot squawked all day."],
+    ["picnic","a meal eaten outdoors","Ants invaded our picnic blanket."],
+    ["pirate","a robber who attacks ships at sea","The pirate buried his loot at midnight."],
+    ["rainbow","an arc of colors that appears after rain","A rainbow arched over the waterfall."],
+    ["sandwich","tasty fillings between two slices of bread","She packed a peanut butter sandwich for lunch."],
+    ["scissors","a two-bladed tool for cutting","Careful with the sharp scissors."],
+    ["shadow","the dark shape cast when light is blocked","His shadow stretched long at dusk."],
+    ["snowman","a figure rolled out of snow","They built a snowman with a carrot nose."],
+    ["squirrel","a bushy-tailed rodent that gathers nuts","The squirrel stuffed acorns in a hollow tree."],
+    ["sunset","the time when the sun goes down","The sky burned orange at sunset."],
+    ["tomorrow","the day after today","We leave for the cabin tomorrow."],
+    ["tractor","a powerful vehicle used on farms","The tractor plowed the muddy field."],
+    ["train","a chain of rail cars pulled by an engine","The express train whooshed past the platform."],
+    ["triangle","a shape with three straight sides","A yield sign is shaped like a triangle."],
+    ["unicorn","a mythical horse with a single horn","The storybook unicorn had a silver horn."],
+    ["violin","a stringed instrument played with a bow","She practiced the violin for the concert."],
+    ["volcano","a mountain that can erupt with lava","Ash floated down from the sleeping volcano."],
+    ["waterfall","water pouring over a cliff","Mist rose from the thundering waterfall."],
+    ["wizard","a man with magical powers","The old wizard muttered a spell."]
+  ],
+  hard: [
+    ["rhythm","a repeated pattern of sound or movement","Clap along with the rhythm of the song."],
+    ["necessary","required; needed","Bring only what is necessary for the trip."],
+    ["embarrass","to make someone feel awkward or ashamed","Clumsy moments can embarrass anyone."],
+    ["occurrence","an event or a happening","Snow in April is a rare occurrence here."],
+    ["conscience","the inner sense of right and wrong","His guilty conscience kept him awake all night."],
+    ["bureaucracy","complicated official systems and red tape","The permit was delayed by endless bureaucracy."],
+    ["liaison","a go-between who links two groups","She acts as the liaison between both teams."],
+    ["millennium","a period of one thousand years","The bridge was built to last a millennium."],
+    ["questionnaire","a printed form used to gather survey answers","Please fill out the customer questionnaire."],
+    ["playwright","a person who writes plays","The playwright took a bow after the show."],
+    ["biscuit","a small, flat, dry baked treat","She dunked the biscuit into her tea."],
+    ["silhouette","a dark outline against a lighter background","A silhouette of the castle stood against the sunset."],
+    ["vacuum","a space completely empty of matter","The vacuum of space has no air."],
+    ["weird","strange or uncanny","The weather has been really weird lately."],
+    ["harass","to bother or trouble someone persistently","It is wrong to harass your classmates."],
+    ["pronunciation","the way a word is spoken","Her pronunciation of French words is flawless."],
+    ["supersede","to take the place of something older","New rules supersede the old ones."],
+    ["threshold","the strip under a doorway; the starting point","He paused on the threshold of the old door."],
+    ["calendar","a chart of the days, weeks, and months","Mark the picnic date on the calendar."],
+    ["guarantee","a formal promise that something will work","The watch comes with a two-year guarantee."],
+    ["separate","to set or keep apart","A fence will separate the two yards."],
+    ["definite","clear, fixed, and certain","We need a definite answer by Friday."],
+    ["restaurant","a place where meals are served to customers","The new restaurant serves spicy noodles."],
+    ["mischievous","playfully causing trouble","The mischievous puppy hid my shoe."],
+    ["nauseous","feeling as if you might be sick","The bumpy ride made her feel nauseous."],
+    ["reservoir","a large lake built to store water","The city's reservoir supplies all our water."],
+    ["chihuahua","a very small breed of dog from Mexico","A tiny chihuahua rode in her purse."],
+    ["acquiesce","to accept or comply without protest","He agreed to acquiesce to their demands."],
+    ["connoisseur","an expert judge of taste, especially food or art","He is a connoisseur of fine chocolate."],
+    ["sacrilegious","disrespectful toward sacred things","They called the remake sacrilegious."],
+    ["reconnaissance","military exploration to gather information","The drone flew a reconnaissance mission."],
+    ["maneuver","a skillful move","The pilot performed a tricky maneuver."],
+    ["brooch","a decorative pin fastened to clothing","She fastened her shawl with a silver brooch."],
+    ["champagne","a sparkling white wine from a region of France","We toasted with a glass of champagne."],
+    ["colonel","a senior army officer above a major","The colonel addressed his troops at dawn."],
+    ["onomatopoeia","words that imitate sounds, like buzz or hiss","Buzz and sizzle are examples of onomatopoeia."],
+    ["perseverance","persistence in spite of difficulty","Her perseverance paid off at last."],
+    ["maintenance","the work of keeping something in good condition","Regular maintenance keeps the machine running."],
+    ["indispensable","impossible to do without","Coffee is indispensable to my mornings."],
+    ["entrepreneur","a person who starts and runs businesses","The young entrepreneur opened a bakery."],
+    ["gauge","a measuring instrument; to judge or estimate","Check the fuel gauge before we leave."],
+    ["camaraderie","warm fellowship among teammates or friends","The team's camaraderie made the season fun."],
+    ["fluorescent","giving off bright light by glowing","The fluorescent lights hummed overhead."],
+    ["hierarchy","a system ranked from top to bottom","Wolves live in a strict hierarchy."],
+    ["exaggerate","to make something seem bigger than it really is","Don't exaggerate how big the fish was."],
+    ["grateful","feeling thankful","I am so grateful for your help."],
+    ["privilege","a special right or advantage","Meeting her was a real privilege."],
+    ["receive","to be given something","Did you receive my letter last week?"],
+    ["disappoint","to fail to meet hopes or expectations","I promise not to disappoint you."],
+    ["committee","a group appointed for a special task","The committee meets every Tuesday."],
+    ["parliament","the lawmaking body of some governments","Parliament debated the new law."],
+    ["phenomenon","something remarkable that can be observed","The northern lights are a natural phenomenon."],
+    ["mortgage","a loan used to buy a home","They took out a mortgage to buy the house."],
+    ["yacht","a sleek boat used for racing or cruising","The yacht glided across the harbor."],
+    ["queue","a line of people waiting their turn","We stood in a long queue for the tickets."],
+    ["island","land completely surrounded by water","The treasure was buried on a tiny island."],
+    ["aisle","the walkway between rows of seats","The bride walked down the aisle."],
+    ["psyche","the human mind or soul","The film explored the human psyche."],
+    ["pneumonia","a serious lung infection","A bad cold can turn into pneumonia."],
+    ["rhyme","words that end with the same sound","Poems often use rhyme at the end of lines."],
+    ["column","a tall upright pillar; a vertical list","The ancient column held up the roof."],
+    ["sergeant","a noncommissioned army officer","The sergeant barked orders at the recruits."],
+    ["vengeance","punishment given in return for a wrong","He wanted vengeance for the stolen crown."],
+    ["asthma","a condition that makes breathing difficult","He carries an inhaler for his asthma."],
+    ["diaphragm","the muscle below the lungs used in breathing","The diaphragm is a muscle below the lungs."],
+    ["handkerchief","a small square of cloth for the nose","He tucked a handkerchief into his jacket pocket."],
+    ["tongue","the movable muscle in the mouth, used for taste and speech","He burned his tongue on the hot soup."],
+    ["jeopardy","danger of loss or harm","The scandal put his career in jeopardy."],
+    ["leisure","free time away from work","We spent our leisure time fishing at the lake."],
+    ["acquaintance","a person you know only slightly","He greeted every acquaintance by name."],
+    ["archipelago","a group or chain of islands","Indonesia is a vast archipelago."],
+    ["bologna","a smooth sausage sliced for sandwiches","She stacked bologna between two slices of bread."],
+    ["camouflage","a disguise that blends into the surroundings","The soldiers painted camouflage on their faces."],
+    ["catastrophe","a sudden and terrible disaster","Losing the map was a catastrophe in the wilderness."],
+    ["chandelier","a branching light fixture that hangs from a ceiling","A crystal chandelier glittered above the ballroom."],
+    ["dachshund","a long-bodied, short-legged dog breed","The dachshund waddled after the ball."],
+    ["debris","scattered pieces left after destruction","Debris littered the street after the storm."],
+    ["diphthong","a gliding vowel sound, like the oy in coin","The vowel in coin forms a diphthong."],
+    ["epitome","a perfect example of a type","Her calm made her the epitome of cool."],
+    ["etiquette","the polite rules of behavior","Good etiquette means chewing with your mouth closed."],
+    ["February","the second month of the year","Groundhog Day arrives in February."],
+    ["flabbergasted","shocked into speechless surprise","He was flabbergasted when he won the raffle."],
+    ["gnat","a tiny biting fly","A gnat kept buzzing around the picnic."],
+    ["gnaw","to bite and wear away by chewing","Puppies gnaw on shoes while teething."],
+    ["hemorrhage","severe bleeding","The paramedic stopped the hemorrhage with a tight bandage."],
+    ["hyperbole","deliberate, wild overstatement","Saying I waited a million years is just hyperbole."],
+    ["hygiene","the practice of keeping clean and healthy","Brushing twice a day is good dental hygiene."],
+    ["khaki","a dull yellow-brown color or fabric","He wore khaki pants to the interview."],
+    ["knead","to press and fold dough with your hands","Bakers knead dough until it is smooth."],
+    ["knight","an armored noble warrior of the Middle Ages","The knight knelt before the queen."],
+    ["llama","a woolly South American pack animal","The llama carried packs up the mountain trail."],
+    ["masquerade","a party where guests wear masks","Everyone wore glittering masks at the masquerade."],
+    ["memento","an object kept as a reminder","She kept the ticket stub as a memento."],
+    ["meringue","a light, airy topping of whipped egg whites and sugar","The pie was crowned with fluffy meringue."],
+    ["mustache","facial hair grown above the upper lip","The detective twirled his mustache thoughtfully."],
+    ["notoriety","fame for something bad","The bank robber gained notoriety in the papers."],
+    ["penicillin","the first antibiotic, discovered in mold","Doctors have prescribed penicillin since the 1940s."],
+    ["physique","the form and fitness of a body","Swimming gave him a strong physique."],
+    ["pigeon","a gray city bird that coos","A pigeon strutted across the plaza."],
+    ["potato","a starchy tuber eaten all over the world","Mashed potato puddled beside the roast."],
+    ["petite","small and slim in build","The petite dancer leapt higher than anyone."],
+    ["quay","a stone platform where ships load and unload","Fishermen unloaded crates at the quay."],
+    ["quiche","a savory open tart filled with egg and cream","She baked a cheese quiche for brunch."],
+    ["raspberry","a soft red berry with a hollow middle","The raspberry jam stained the tablecloth."],
+    ["receipt","a paper that proves you paid","Keep the receipt in case you return the boots."],
+    ["rendezvous","an arranged meeting place or time","Their secret rendezvous was behind the old mill."],
+    ["repertoire","the set of pieces a performer knows","The pianist's repertoire spans three centuries."],
+    ["respiratory","relating to breathing","Jogging builds strong respiratory stamina."],
+    ["surprise","something unexpected","Nobody expected the surprise ending."],
+    ["surveillance","a close watch kept over someone or something","Cameras kept surveillance on the vault around the clock."],
+    ["stethoscope","a doctor's tool for listening to the chest","The nurse hung the stethoscope around her neck."],
+    ["tortilla","a thin flatbread made of corn or wheat","Wrap the beans and rice in a warm tortilla."],
+    ["twelfth","coming after the eleventh","Her birthday falls on the twelfth of June."],
+    ["veterinarian","an animal doctor","The veterinarian nursed the injured owl."],
+    ["wreck","the smashed remains of something; to destroy","Divers explored the wreck of the old galleon."],
+    ["xylophone","a musical instrument of struck wooden bars","The child tapped a tune on the xylophone."],
+    ["salmon","a pink-fleshed fish that swims upstream to spawn","Bears snag salmon leaping up the falls."],
+    ["almond","an oval nut with a woody shell","She stirred almond slices into the salad."]
+  ]
+};
+
+const DIFF = {
+  easy:   { label:'Easy',   mult:1,   time:30, rate:0.85 },
+  medium: { label:'Medium', mult:1.5, time:25, rate:0.95 },
+  hard:   { label:'Hard',   mult:2,   time:20, rate:1.0  }
+};
+
+const $ = id => document.getElementById(id);
+const KEY = 'spellbee_scores_v1';
+
+/* ================= Duel setup ================= */
+const BUZZ_KEYS = ['q','p','b','m','y'];
+const PLAYER_COLORS = ['#b6372a','#31567a','#2f6b4a','#a87b16','#7b4a78'];
+const DUEL_WORDS = 12;      // words per duel match
+const ANSWER_TIME = 12;     // seconds at the mic after ringing in
+const WRONG_PENALTY = 20;   // points lost for a wrong spelling
+
+/* ================= TTS ================= */
+const synth = ('speechSynthesis' in window) ? window.speechSynthesis : null;
+let voices = [];
+function refreshVoices(){ if(synth) voices = synth.getVoices() || []; }
+if(synth){
+  refreshVoices();
+  if(typeof synth.addEventListener === 'function') synth.addEventListener('voiceschanged', refreshVoices);
+  else synth.onvoiceschanged = refreshVoices;
+}
+function pickVoice(){
+  const en = voices.filter(v => /^en[-_]?/i.test(v.lang || ''));
+  return en.find(v => /google us english/i.test(v.name))
+      || en.find(v => /en[-_]us/i.test(v.lang || ''))
+      || en.find(v => /aria|zira|samantha|karen|daniel/i.test(v.name))
+      || en[0] || null;
+}
+function say(text, rate){
+  if(!synth || !text) return false;
+  try{
+    synth.cancel();
+    const u = new SpeechSynthesisUtterance(text);
+    u.rate = rate || 1; u.pitch = 1; u.volume = 1;
+    const v = pickVoice(); if(v) u.voice = v;
+    synth.speak(u);
+    return true;
+  }catch(e){ return false; }
+}
+
+/* ================= Helpers ================= */
+function shuffle(a){ for(let i=a.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [a[i],a[j]]=[a[j],a[i]]; } return a; }
+function showScreen(name){ ['start','game','over'].forEach(n => $('screen-'+n).classList.toggle('active', n===name)); }
+function setFeedback(html, cls){ const f=$('feedback'); f.innerHTML=html; f.className='feedback '+(cls||''); }
+
+/* ================= State ================= */
+const S = {
+  session:0, diff:'medium', queue:[], qi:0, lives:3,
+  score:0, streak:0, best:0, right:0, wrong:0, seen:0,
+  time:0, limit:25, tId:null, playing:false, passed:false,
+  word:'', definition:'', sentence:'', missed:[],
+  mode:'solo', players:[], phase:'listen', active:-1,
+  spoken:false, wordTimeLeft:0
+};
+window.SB = S; // handy for debugging
+
+/* ================= Leaderboard ================= */
+function loadBoard(){
+  try{ const a = JSON.parse(localStorage.getItem(KEY) || '[]'); return Array.isArray(a) ? a : []; }
+  catch(e){ return []; }
+}
+function saveScore(name, score, diff, streak, acc){
+  const arr = loadBoard();
+  const e = { id:Date.now().toString(36)+Math.random().toString(36).slice(2,6),
+              name:name||'Player', score:score, diff:diff, streak:streak, acc:acc,
+              date:new Date().toLocaleDateString() };
+  arr.push(e);
+  try{ localStorage.setItem(KEY, JSON.stringify(arr)); }catch(err){}
+  return e.id;
+}
+function topFor(diff){
+  return loadBoard().filter(e => e.diff===diff).sort((a,b)=>b.score-a.score).slice(0,10);
+}
+function bestFor(diff){ const t = topFor(diff); return t.length ? t[0].score : 0; }
+
+function renderBoard(ol, diff, hl){
+  ol.innerHTML = '';
+  const list = topFor(diff);
+  if(!list.length){
+    const li = document.createElement('li'); li.className='empty';
+    li.textContent = 'No scores yet — make history.';
+    ol.appendChild(li); return;
+  }
+  list.forEach((e,i)=>{
+    const li = document.createElement('li');
+    if(e.id===hl) li.classList.add('me');
+    const rk = document.createElement('span'); rk.className='rk';
+    rk.textContent = (i+1)+'.';
+    const nm = document.createElement('span'); nm.className='nm'; nm.textContent = e.name;
+    const dt = document.createElement('span'); dt.className='dt';
+    dt.textContent = 'streak '+(e.streak||0)+' · '+(e.acc||0)+'%';
+    const sc = document.createElement('span'); sc.className='sc';
+    sc.textContent = (e.score||0).toLocaleString();
+    const ld=document.createElement('span'); ld.className='lead';
+    li.append(rk, nm, ld, dt, sc);
+    ol.appendChild(li);
+  });
+}
+
+/* ================= Effects ================= */
+function confettiBurst(n){
+  const colors = ['#b6372a','#2f6b4a','#c99a3a','#31567a','#26221a'];
+  for(let i=0;i<n;i++){
+    const s = document.createElement('span');
+    s.className='cf';
+    s.style.left = (42+Math.random()*16)+'vw';
+    s.style.top  = (40+Math.random()*12)+'vh';
+    s.style.background = colors[i % colors.length];
+    s.style.setProperty('--tx', ((Math.random()*2-1)*34)+'vw');
+    s.style.setProperty('--ty', (-(8+Math.random()*34))+'vh');
+    s.style.setProperty('--rot', (Math.random()*720-360)+'deg');
+    document.body.appendChild(s);
+    setTimeout(()=>s.remove(), 1100);
+  }
+}
+function floatPoints(pts){
+  const el = document.createElement('div');
+  el.className='float-pts'; el.textContent='+'+pts.toLocaleString();
+  $('score-box').appendChild(el);
+  setTimeout(()=>el.remove(), 1000);
+}
+function popScore(){
+  const box=$('score-box');
+  box.classList.remove('pop'); void box.offsetWidth; box.classList.add('pop');
+}
+function flashRecord(){
+  const el=$('record-flash'); el.classList.remove('hidden');
+  confettiBurst(18);
+  const tok=S.session;
+  setTimeout(()=>{ if(tok===S.session) el.classList.add('hidden'); }, 2600);
+}
+
+/* ================= HUD ================= */
+function renderHearts(){
+  const h=$('hearts'); h.innerHTML='';
+  for(let i=0;i<3;i++){
+    const s=document.createElement('span');
+    s.className='heart'+(i<S.lives?'':' lost');
+    s.textContent='❤';
+    h.appendChild(s);
+  }
+}
+function comboMult(streak){ return 1 + Math.min(10, Math.max(0,streak-1))*0.1; }
+function renderHud(){
+  $('score').textContent = S.score.toLocaleString();
+  const sb=$('streak-box');
+  if(S.streak>=2){
+    sb.classList.remove('hidden');
+    $('streak-count').textContent = S.streak;
+    $('combo').textContent = '×'+comboMult(S.streak).toFixed(1);
+  } else sb.classList.add('hidden');
+  const best = bestFor(S.diff);
+  $('best-line').textContent = best
+    ? ('best on '+DIFF[S.diff].label+' · '+best.toLocaleString())
+    : ('no scores on '+DIFF[S.diff].label+' yet — set the mark');
+  if(S.mode==='solo' && !S.passed && best && S.score > best){ S.passed = true; flashRecord(); }
+}
+
+/* ================= Timer ================= */
+function paintTimer(){
+  const frac = Math.max(0, S.time/S.limit);
+  const bar = $('timer-bar');
+  bar.style.width = (frac*100)+'%';
+  bar.classList.remove('t-ok','t-mid','t-low');
+  bar.classList.add(frac>0.5 ? 't-ok' : (frac>0.25 ? 't-mid' : 't-low'));
+  $('timer-text').textContent = Math.ceil(S.time)+'s';
+}
+function stopTimer(){ if(S.tId){ clearInterval(S.tId); S.tId=null; } }
+function runTimer(seconds, phaseName){
+  stopTimer();
+  S.phase=phaseName;
+  S.time=Math.max(0.1,seconds); paintTimer();
+  S.tId=setInterval(tickLoop, 100);
+}
+function startTimer(){ runTimer(S.limit,'listen'); }
+function tickLoop(){
+  S.time -= 0.1;
+  if(S.time <= 0){ S.time=0; paintTimer(); stopTimer(); onTimeUp(); return; }
+  paintTimer();
+}
+function onTimeUp(){
+  if(S.mode!=='duel'){ timeUp(); return; }
+  if(S.phase==='answer') duelWrong(true); else nobodyGotIt();
+}
+
+/* ================= Game flow ================= */
+function startGame(diff){
+  if(!DIFF[diff]) return;
+  if(MODE==='duel') startDuel(diff); else startSolo(diff);
+}
+
+function startSolo(diff){
+  const nm = ($('name-input').value || '').trim() || 'Player';
+  try{ localStorage.setItem('sb_name', nm); }catch(e){}
+  S.session++;
+  S.mode='solo';
+  S.diff=diff; S.queue=shuffle(WORDS[diff].slice()); S.qi=0;
+  S.lives=3; S.score=0; S.streak=0; S.best=0;
+  S.right=0; S.wrong=0; S.seen=0; S.passed=false; S.playing=true;
+  S.limit=DIFF[diff].time; S.missed=[];
+  S.phase='listen'; S.active=-1;
+  const pill=$('diff-pill');
+  pill.textContent = DIFF[diff].label.toUpperCase();
+  pill.className = 'pill '+diff;
+  $('bot-say').textContent = 'Listen…';
+  $('hearts').classList.remove('hidden');
+  $('best-line').classList.remove('hidden');
+  $('score-box').classList.remove('hidden');
+  $('players').classList.add('hidden');
+  renderHearts();
+  showScreen('game');
+  nextWord();
+}
+
+function startDuel(diff){
+  S.session++;
+  S.mode='duel';
+  S.diff=diff; S.queue=shuffle(WORDS[diff].slice()); S.qi=0;
+  S.score=0; S.seen=0; S.playing=true;
+  S.limit=DIFF[diff].time; S.missed=[];
+  S.phase='listen'; S.active=-1; S.spoken=false;
+  const names=duelRoster.map((p,i)=>(p.name||'').trim() || ('Player '+(i+1)));
+  try{ localStorage.setItem('sb_duel', JSON.stringify(names)); }catch(e){}
+  S.players=names.map((n,i)=>({ name:n, key:BUZZ_KEYS[i], color:PLAYER_COLORS[i],
+                                 score:0, won:0, locked:false, reaction:0 }));
+  const pill=$('diff-pill');
+  pill.textContent = DIFF[diff].label.toUpperCase();
+  pill.className = 'pill '+diff;
+  $('bot-say').textContent = 'Listen…';
+  $('hearts').classList.add('hidden');
+  $('best-line').classList.add('hidden');
+  $('score-box').classList.add('hidden');
+  $('players').classList.remove('hidden');
+  renderPlayers();
+  showScreen('game');
+  nextWord();
+}
+
+function nextWord(){
+  // Endless play: when the bank runs out, reshuffle it — but never start a new
+  // cycle with the word that was just played.
+  if(S.qi >= S.queue.length){
+    let fresh = shuffle(WORDS[S.diff].slice());
+    if(S.word && fresh.length > 1 && fresh[0][0] === S.word){
+      const j = 1 + Math.floor(Math.random()*(fresh.length-1));
+      const t = fresh[0]; fresh[0] = fresh[j]; fresh[j] = t;
+    }
+    S.queue = fresh; S.qi = 0;
+  }
+  const e = S.queue[S.qi];
+  S.word = e[0]; S.definition = e[1]; S.sentence = e[2];
+  S.seen++; S.playing = true;
+  $('word-num').textContent = S.mode==='duel' ? ('Word '+S.seen+' of '+DUEL_WORDS) : ('Word '+S.seen);
+  const inp = $('answer-input');
+  inp.value='';
+  inp.disabled = (S.mode==='duel');   // duel: nobody types until they ring in
+  renderHud();
+  const tok = S.session;
+  if(S.mode==='duel'){
+    S.players.forEach(p=>p.locked=false);
+    S.active=-1; S.phase='listen'; S.spoken=false;
+    renderPlayers();
+  }else{
+    inp.focus();
+  }
+  if(synth){
+    setFeedback(S.mode==='duel' ? 'Hands on your buzzers — first to ring in, spells it.' : 'Listen carefully…','');
+    startTimer();
+    setTimeout(()=>{ if(tok===S.session){ S.spoken=true; say(S.word, DIFF[S.diff].rate); } }, 450);
+  }else{
+    // Fallback when the browser has no speech: flash the word briefly.
+    setFeedback('No speech support — memorise it quick: <b class="reveal">'+S.word.toUpperCase()+'</b>','warn');
+    setTimeout(()=>{
+      if(tok!==S.session) return;
+      setFeedback('Now type it from memory!','');
+      S.spoken=true;
+      startTimer();
+    }, 2600);
+  }
+}
+
+function repeatFallback(){
+  if(!S.playing) return;
+  setFeedback('The word again: <b class="reveal">'+S.word.toUpperCase()+'</b>','warn');
+  const tok=S.session;
+  setTimeout(()=>{ if(tok===S.session && S.playing) setFeedback('Type it!',''); }, 1200);
+}
+
+$('answer-form').addEventListener('submit', e=>{
+  e.preventDefault();
+  if(!S.playing) return;
+  const inp = $('answer-input');
+  const val = inp.value.trim().toLowerCase();
+  if(!val) return;
+  S.playing=false; inp.disabled=true; stopTimer();
+  const right = val === S.word.toLowerCase();
+  if(S.mode==='duel'){ right ? duelCorrect() : duelWrong(false); }
+  else { right ? onCorrect() : onWrong(false); }
+});
+
+function onCorrect(){
+  S.streak++; S.best = Math.max(S.best, S.streak); S.right++;
+  const mult = comboMult(S.streak);
+  const frac = Math.max(0, S.time/S.limit);
+  const pts = Math.round((60 + S.word.length*12 + frac*80) * DIFF[S.diff].mult * mult);
+  S.score += pts;
+  setFeedback('✓ Correct — <b>+'+pts.toLocaleString()+'</b>'
+    + (mult>1 ? ' <i>(combo ×'+mult.toFixed(1)+')</i>' : '')
+    + (frac>0.6 ? ' <i>speed bonus</i>' : ''), 'good');
+  confettiBurst(24); floatPoints(pts); popScore(); renderHud();
+  S.qi++;
+  const tok=S.session;
+  setTimeout(()=>{ if(tok===S.session) nextWord(); }, 1000);
+}
+
+function onWrong(timedOut){
+  S.streak=0; S.wrong++; S.lives--;
+  S.missed.push({ w:S.word, d:S.definition });
+  renderHearts(); renderHud();
+  const inp=$('answer-input');
+  inp.classList.add('shake');
+  setTimeout(()=>inp.classList.remove('shake'), 450);
+  setFeedback((timedOut ? '✗ Time ran out — the word was ' : '✗ Not quite — the word was ')
+    + '<b class="reveal">'+S.word.toUpperCase()+'</b>'
+    + '<span class="def">meaning: '+S.definition+'</span>', 'bad');
+  S.qi++;
+  const tok=S.session;
+  setTimeout(()=>{
+    if(tok!==S.session) return;
+    if(S.lives<=0) gameOver(); else nextWord();
+  }, 2000);
+}
+
+function timeUp(){
+  if(!S.playing) return;
+  S.playing=false; $('answer-input').disabled=true;
+  onWrong(true);
+}
+
+/* ================= Duel ================= */
+function esc(s){
+  return String(s).replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+function renderPlayers(){
+  const box=$('players'); box.innerHTML='';
+  S.players.forEach((p,i)=>{
+    const chip=document.createElement('div');
+    chip.className='pchip'+(i===S.active?' active':'')+(p.locked?' out':'');
+    chip.style.setProperty('--pc', p.color);
+    const dot=document.createElement('span'); dot.className='pdot';
+    const nm=document.createElement('span'); nm.className='pnm'; nm.textContent=p.name;
+    const sc=document.createElement('span'); sc.className='psc'; sc.textContent=p.score.toLocaleString();
+    const key=document.createElement('span'); key.className='pkey-mini'; key.textContent=p.key.toUpperCase();
+    chip.append(dot,nm,sc,key);
+    box.appendChild(chip);
+  });
+}
+
+document.addEventListener('keydown', e=>{
+  if(!e.key || e.key.length!==1) return;
+  const ae=document.activeElement;
+  if(ae && ae.tagName==='INPUT' && !ae.disabled) return;  // someone is typing
+  const i=S.players.findIndex(p=>p.key===e.key.toLowerCase());
+  if(i>=0){ e.preventDefault(); buzz(i); }
+});
+
+function buzz(i){
+  if(S.mode!=='duel' || !S.playing || S.phase!=='listen' || !S.spoken) return;
+  const p=S.players[i];
+  if(!p || p.locked) return;
+  S.active=i; S.phase='answer';
+  S.wordTimeLeft=S.time;
+  p.reaction=Math.max(0, S.limit - S.time);
+  S.time=ANSWER_TIME; paintTimer();
+  const inp=$('answer-input');
+  inp.disabled=false; inp.value=''; inp.focus();
+  setFeedback('<b style="color:'+p.color+'">'+esc(p.name)+'</b> rang in — spell it!', 'warn');
+  renderPlayers();
+}
+
+function duelCorrect(){
+  stopTimer();
+  const p=S.players[S.active];
+  const pts=Math.round((40 + S.word.length*10 + Math.max(0, 50 - p.reaction*4)) * DIFF[S.diff].mult);
+  p.score+=pts; p.won++;
+  renderPlayers(); confettiBurst(20);
+  setFeedback('✓ <b style="color:'+p.color+'">'+esc(p.name)+'</b> spells it — <b>+'+pts.toLocaleString()+'</b> <i>(rang in at '+p.reaction.toFixed(1)+'s)</i>', 'good');
+  S.qi++;
+  const tok=S.session;
+  setTimeout(()=>{ if(tok===S.session) advance(); }, 1800);
+}
+
+function duelWrong(timedOut){
+  const p=S.players[S.active];
+  if(p){
+    if(!timedOut) p.score=Math.max(0, p.score-WRONG_PENALTY);
+    p.locked=true;
+    S.missed.push({w:S.word, d:S.definition});
+  }
+  renderPlayers();
+  const inp=$('answer-input');
+  inp.value=''; inp.disabled=true;
+  const alive=S.players.filter(q=>!q.locked);
+  if(alive.length){
+    S.active=-1; S.phase='listen'; S.playing=true;
+    setFeedback('✗ '+esc(p?p.name:'Someone')+(timedOut?' ran out of time':' missed it')
+      +' — still open: '+alive.map(q=>esc(q.name)).join(', ')+'.', 'bad');
+    renderPlayers();
+    runTimer(Math.max(1,S.wordTimeLeft),'listen');
+  }else{
+    wordDead('✗ '+esc(p?p.name:'Nobody')+(timedOut?' ran out of time':' got it'));
+  }
+}
+
+function nobodyGotIt(){ wordDead('✗ Nobody rang in'); }
+
+function wordDead(prefix){
+  stopTimer();
+  S.playing=false;
+  $('answer-input').disabled=true;
+  setFeedback(prefix+' — the word was <b class="reveal">'+S.word.toUpperCase()+'</b><span class="def">meaning: '+S.definition+'</span>', 'bad');
+  S.qi++;
+  const tok=S.session;
+  setTimeout(()=>{ if(tok===S.session) advance(); }, 2200);
+}
+
+function advance(){
+  if(S.mode==='duel' && S.seen>=DUEL_WORDS) finishDuel();
+  else nextWord();
+}
+
+function finishDuel(){
+  stopTimer();
+  if(synth) synth.cancel();
+  S.playing=false;
+  const order=S.players.slice().sort((a,b)=>b.score-a.score);
+  const w=order[0];
+  const tied=order.filter(p=>p.score===w.score).length>1;
+  $('over-title').textContent = tied ? 'Dead heat!' : (w.name+' wins');
+  $('final-score').textContent = w.score.toLocaleString();
+  $('final-label').textContent = 'winning score';
+  $('new-record').classList.add('hidden');
+  $('stats-grid').classList.add('hidden');
+  $('lb-title').classList.add('hidden');
+  $('board-over').classList.add('hidden');
+  $('standings-title').classList.remove('hidden');
+  $('standings').classList.remove('hidden');
+  const st=$('standings'); st.innerHTML='';
+  order.forEach((p,i)=>{
+    const li=document.createElement('li'); if(i===0 && !tied) li.classList.add('me');
+    const rk=document.createElement('span'); rk.className='rk'; rk.textContent=(i+1)+'.';
+    const nm=document.createElement('span'); nm.className='nm'; nm.textContent=p.name; nm.style.color=p.color;
+    const ld=document.createElement('span'); ld.className='lead';
+    const dt=document.createElement('span'); dt.className='dt'; dt.textContent='won '+p.won+' word'+(p.won===1?'':'s');
+    const sc=document.createElement('span'); sc.className='sc'; sc.textContent=p.score.toLocaleString();
+    li.append(rk,nm,ld,dt,sc);
+    st.appendChild(li);
+  });
+  renderReview();
+  showScreen('over');
+}
+
+function renderReview(){
+  const rt=$('review-title'), rv=$('review-box');
+  if(S.missed.length){
+    rt.classList.remove('hidden'); rv.classList.remove('hidden');
+    rv.innerHTML='';
+    S.missed.slice(-20).forEach(m=>{
+      const li=document.createElement('li');
+      const b=document.createElement('b'); b.textContent=m.w;
+      li.appendChild(b);
+      li.appendChild(document.createTextNode(' — '+m.d));
+      rv.appendChild(li);
+    });
+  }else{
+    rt.classList.add('hidden'); rv.classList.add('hidden');
+  }
+}
+
+function rankFor(s){
+  if(s>=4000) return 'Grand Champion Beekeeper';
+  if(s>=2500) return 'Grand Grammarian';
+  if(s>=1500) return 'Spelling Sergeant';
+  if(s>=800)  return 'Word Wizard';
+  if(s>=350)  return 'Spell Scout';
+  return 'Word Rookie';
+}
+
+function gameOver(){
+  stopTimer();
+  if(synth) synth.cancel();
+  S.playing=false;
+  let name='Player';
+  try{ name = localStorage.getItem('sb_name') || 'Player'; }catch(e){}
+  const attempts = S.right + S.wrong;
+  const acc = attempts ? Math.round(S.right/attempts*100) : 0;
+  $('over-title').textContent = rankFor(S.score);
+  $('final-score').textContent = S.score.toLocaleString();
+  $('over-diff').textContent = DIFF[S.diff].label;
+  $('final-label').textContent = 'final score';
+  $('stats-grid').classList.remove('hidden');
+  $('lb-title').classList.remove('hidden');
+  $('board-over').classList.remove('hidden');
+  $('standings-title').classList.add('hidden');
+  $('standings').classList.add('hidden');
+  const g=$('stats-grid'); g.innerHTML='';
+  [['Words spelled', S.right],
+   ['Best streak', S.best],
+   ['Accuracy', acc+'%'],
+   ['Difficulty', DIFF[S.diff].label]].forEach(p=>{
+    const d=document.createElement('div'); d.className='stat';
+    const v=document.createElement('div'); v.className='v'; v.textContent=p[1];
+    const k=document.createElement('div'); k.className='k'; k.textContent=p[0];
+    d.append(v,k); g.appendChild(d);
+  });
+  // Words to review: every word you missed, with its meaning
+  renderReview();
+  const id = S.score > 0 ? saveScore(name, S.score, S.diff, S.best, acc) : null;
+  const top = topFor(S.diff);
+  $('new-record').classList.toggle('hidden', !(id && top.length && top[0].id===id));
+  renderBoard($('board-over'), S.diff, id);
+  showScreen('over');
+}
+
+/* ================= Wire up ================= */
+document.querySelectorAll('.diff-card').forEach(c =>
+  c.addEventListener('click', ()=>startGame(c.dataset.diff)));
+
+let tab='easy';
+function setTab(t){
+  tab=t;
+  document.querySelectorAll('.tab').forEach(b=>b.classList.toggle('active', b.dataset.tab===t));
+  renderBoard($('board-start'), t, null);
+}
+document.querySelectorAll('.tab').forEach(b =>
+  b.addEventListener('click', ()=>setTab(b.dataset.tab)));
+
+$('btn-test-voice').addEventListener('click', ()=>{
+  if(!say('Hello! The bot is ready. Let us spell some words!', 0.95)) alert('Sorry — your browser does not support speech synthesis.');
+});
+
+$('btn-repeat').addEventListener('click', ()=>{
+  if(!S.playing) return;
+  if(synth) say(S.word, DIFF[S.diff].rate); else repeatFallback();
+});
+$('btn-slow').addEventListener('click', ()=>{
+  if(!S.playing) return;
+  if(synth) say(S.word, 0.6); else repeatFallback();
+});
+$('btn-define').addEventListener('click', ()=>{
+  if(!S.playing) return;
+  setFeedback('meaning: '+S.definition, 'warn');
+  if(synth) say(S.definition, 0.95);
+});
+$('btn-sentence').addEventListener('click', ()=>{
+  if(!S.playing) return;
+  if(synth) say(S.sentence, 0.95); else repeatFallback();
+});
+$('btn-quit').addEventListener('click', ()=>{
+  S.session++; stopTimer();
+  if(synth) synth.cancel();
+  S.playing=false;
+  setTab(tab);
+  showScreen('start');
+});
+$('btn-again').addEventListener('click', ()=>startGame(S.diff));
+$('btn-menu').addEventListener('click', ()=>{ setTab(tab); showScreen('start'); });
+
+/* ---------- mode & duel roster ---------- */
+let MODE='solo';
+let duelRoster=[{name:''},{name:''}];
+function setMode(m){
+  MODE=m;
+  $('tab-solo').classList.toggle('active', m==='solo');
+  $('tab-duel').classList.toggle('active', m==='duel');
+  $('solo-setup').classList.toggle('hidden', m!=='solo');
+  $('duel-setup').classList.toggle('hidden', m!=='duel');
+}
+function renderRoster(){
+  const box=$('player-rows'); box.innerHTML='';
+  duelRoster.forEach((p,i)=>{
+    const row=document.createElement('div'); row.className='prow';
+    row.style.setProperty('--pc', PLAYER_COLORS[i]);
+    const key=document.createElement('span'); key.className='pkey';
+    key.textContent=BUZZ_KEYS[i].toUpperCase();
+    const inp=document.createElement('input'); inp.className='pname';
+    inp.maxLength=14; inp.placeholder='Player '+(i+1); inp.value=p.name;
+    inp.addEventListener('input', ()=>{ p.name=inp.value; });
+    const rm=document.createElement('button'); rm.type='button'; rm.className='premove';
+    rm.textContent='✕'; rm.disabled=duelRoster.length<=2; rm.title='remove player';
+    rm.addEventListener('click', ()=>{ duelRoster.splice(i,1); renderRoster(); });
+    row.append(key, inp, rm);
+    box.appendChild(row);
+  });
+  const add=$('btn-add-player');
+  add.disabled = duelRoster.length>=5;
+  add.style.opacity = duelRoster.length>=5 ? .45 : 1;
+}
+$('tab-solo').addEventListener('click', ()=>setMode('solo'));
+$('tab-duel').addEventListener('click', ()=>setMode('duel'));
+$('btn-add-player').addEventListener('click', ()=>{ if(duelRoster.length<5){ duelRoster.push({name:''}); renderRoster(); } });
+try{
+  const saved=JSON.parse(localStorage.getItem('sb_duel')||'null');
+  if(Array.isArray(saved) && saved.length>=2){
+    duelRoster=saved.slice(0,5).map(n=>({name:String(n==null?'':n).slice(0,14)}));
+  }
+}catch(e){}
+renderRoster();
+setMode('solo');
+
+try{ $('name-input').value = localStorage.getItem('sb_name') || ''; }catch(e){}
+setTab('easy');
+</script>
+</body>
+</html>
