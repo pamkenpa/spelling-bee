@@ -1085,6 +1085,29 @@ function sayWordTwice(rate){
 
 /* ================= Helpers ================= */
 function shuffle(a){ for(let i=a.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [a[i],a[j]]=[a[j],a[i]]; } return a; }
+/* Recently-played words sink to the back of the queue, so after a game ends
+   the next one deals vocabulary you haven't seen lately. */
+function recentWords(diff){
+  try{
+    const r = JSON.parse(localStorage.getItem('sb_recent')||'{}');
+    return (r[diff]||[]).map(x => String(x.w).toLowerCase());
+  }catch(e){ return []; }
+}
+function rememberWord(diff, word){
+  try{
+    const r = JSON.parse(localStorage.getItem('sb_recent')||'{}');
+    const arr = r[diff]||[];
+    arr.push({w:String(word).toLowerCase(), t:Date.now()});
+    r[diff] = arr.slice(-80);
+    localStorage.setItem('sb_recent', JSON.stringify(r));
+  }catch(e){}
+}
+function freshQueue(diff){
+  const recent = new Set(recentWords(diff));
+  const bank = shuffle(WORDS[diff].slice());
+  return bank.filter(e => !recent.has(e[0].toLowerCase()))
+             .concat(bank.filter(e => recent.has(e[0].toLowerCase())));
+}
 function showScreen(name){ ['start','game','over'].forEach(n => $('screen-'+n).classList.toggle('active', n===name)); }
 function setFeedback(html, cls){ const f=$('feedback'); f.innerHTML=html; f.className='feedback '+(cls||''); }
 
@@ -1250,7 +1273,7 @@ function startSolo(diff){
   try{ localStorage.setItem('sb_name', nm); }catch(e){}
   S.session++;
   S.mode='solo';
-  S.diff=diff; S.queue=shuffle(WORDS[diff].slice()); S.qi=0;
+  S.diff=diff; S.queue=freshQueue(diff); S.qi=0;
   S.lives=3; S.score=0; S.streak=0; S.best=0;
   S.right=0; S.wrong=0; S.seen=0; S.passed=false; S.playing=true;
   S.limit=DIFF[diff].time; S.missed=[];
@@ -1271,7 +1294,7 @@ function startSolo(diff){
 function startDuel(diff){
   S.session++;
   S.mode='duel';
-  S.diff=diff; S.queue=shuffle(WORDS[diff].slice()); S.qi=0;
+  S.diff=diff; S.queue=freshQueue(diff); S.qi=0;
   S.score=0; S.seen=0; S.playing=true;
   S.limit=DIFF[diff].time; S.missed=[];
   S.phase='listen'; S.active=-1; S.spoken=false;
@@ -1296,7 +1319,7 @@ function nextWord(){
   // Endless play: when the bank runs out, reshuffle it — but never start a new
   // cycle with the word that was just played.
   if(S.qi >= S.queue.length){
-    let fresh = shuffle(WORDS[S.diff].slice());
+    let fresh = freshQueue(S.diff);
     if(S.word && fresh.length > 1 && fresh[0][0] === S.word){
       const j = 1 + Math.floor(Math.random()*(fresh.length-1));
       const t = fresh[0]; fresh[0] = fresh[j]; fresh[j] = t;
@@ -1305,6 +1328,7 @@ function nextWord(){
   }
   const e = S.queue[S.qi];
   S.word = e[0]; S.definition = e[1]; S.sentence = e[2];
+  rememberWord(S.diff, S.word);
   S.seen++; S.playing = true;
   $('word-num').textContent = S.mode==='duel' ? ('Word '+S.seen+' of '+DUEL_WORDS) : ('Word '+S.seen);
   const inp = $('answer-input');
@@ -1792,7 +1816,7 @@ function hostStart(){
   if(!N.isHost) return;
   N.netDiff=$('net-diff').value;
   S.players.forEach(p=>{p.score=0; p.won=0; p.locked=false;});
-  N.order=shuffle(WORDS[N.netDiff].slice());
+  N.order=freshQueue(N.netDiff);
   N.idx=0; N.started=true;
   const msg={t:'start', diff:N.netDiff, total:TOTAL_WORDS, players:S.players.map(p=>({pid:p.pid,name:p.name}))};
   N.send(msg); applyStart(msg);
@@ -1819,6 +1843,7 @@ function hostRound(){
 }
 function applyRound(msg){
   S.word=msg.word; S.definition=msg.def; S.seen=msg.n; S.playing=true;
+  rememberWord(S.diff, msg.word);
   S.players.forEach(p=>p.locked=false);
   if(msg.players) applySnapshot(msg.players);
   N.activePid=null; S.active=-1; S.phase='listen'; S.spoken=false;
