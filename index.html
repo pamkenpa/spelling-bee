@@ -412,7 +412,7 @@
       </div>
       <div class="voice-row">
         <button type="button" class="btn-voice-test" id="btn-test-voice">test your speaker</button>
-        <select id="voice-select" class="voice-select" aria-label="bot voice"></select>
+        <select id="voice-select" class="voice-select" aria-label="reader voice"></select>
         <label class="opt"><input type="checkbox" id="opt-twice" checked> say each word twice</label>
       </div>
 
@@ -1024,64 +1024,92 @@ const DUEL_WORDS = 12;      // words per duel match
 const ANSWER_TIME = 12;     // seconds at the mic after ringing in
 const WRONG_PENALTY = 20;   // points lost for a wrong spelling
 
-/* ================= TTS ================= */
-const synth = ('speechSynthesis' in window) ? window.speechSynthesis : null;
-let voices = [];
-function voiceRank(v){
-  const n = (v.name || '').toLowerCase();
-  if(/natural|neural|online/.test(n)) return 4;          // modern high-quality voices
-  if(/premium|enhanced|google/.test(n)) return 3;
-  if(/aria|jenny|guy|zira|david|serena|samantha/.test(n)) return 2;
-  return 1;
+/* ================= Readers — natural cloud voices ================= */
+/* The local robotic speechSynthesis bots are gone. Words are now spoken by
+   natural reader voices streamed as audio (Google's neural voices, the same
+   class of natural voices services like NaturalReaders sell — NaturalReaders
+   itself has no free embeddable API). */
+const READERS = [
+  { id:'en',    label:'Reader 1 · US English · natural' },
+  { id:'en-GB', label:'Reader 2 · UK English · natural' }
+];
+const VOICE = { el:null, token:0, ok:false, tried:false };
+function canSpeak(){ return VOICE.ok || !VOICE.tried; }
+function currentReader(){
+  let r=null; try{ r = localStorage.getItem('sb_voice'); }catch(e){}
+  return READERS.find(x => x.id === r) || READERS[0];
 }
-function refreshVoices(){
-  if(synth) voices = synth.getVoices() || [];
-  refreshVoiceSelect();
+function stopSpeaking(){
+  VOICE.token++;
+  try{ if(VOICE.el) VOICE.el.pause(); }catch(e){}
+  if(VOICE.blobUrl){ try{ URL.revokeObjectURL(VOICE.blobUrl); }catch(e){} VOICE.blobUrl=null; }
 }
-if(synth){
-  refreshVoices();
-  if(typeof synth.addEventListener === 'function') synth.addEventListener('voiceschanged', refreshVoices);
-  else synth.onvoiceschanged = refreshVoices;
+function ttsFail(){
+  VOICE.ok = false;
+  if(typeof S !== 'undefined' && S.playing && S.phase === 'listen')
+    setFeedback('Audio needs a connection — the word was: <b class="reveal">'+S.word.toUpperCase()+'</b>','warn');
 }
-function pickVoice(){
-  const en = voices.filter(v => /^en[-_]?/i.test(v.lang || ''));
-  let saved = null; try{ saved = localStorage.getItem('sb_voice'); }catch(e){}
-  if(saved){ const hit = en.find(v => v.name === saved); if(hit) return hit; }
-  return en.slice().sort((a,b) => voiceRank(b) - voiceRank(a))[0] || null;
+function speak(text, rate, onDone){
+  if(!text) return false;
+  VOICE.tried = true;
+  stopSpeaking();
+  const tok = VOICE.token;
+  const a = VOICE.el || (VOICE.el = new Audio());
+  const tts = 'https://translate.google.com/translate_tts?ie=UTF-8&client=tw-ob&tl='
+            + encodeURIComponent(currentReader().id)
+            + '&q=' + encodeURIComponent(String(text).slice(0, 200));
+  const relays = [
+    u => 'https://api.allorigins.win/raw?url=' + encodeURIComponent(u),
+    u => 'https://api.codetabs.com/v1/proxy?quest=' + encodeURIComponent(u)
+  ];
+  let step = -1;   // -1 = direct, then relay index
+  const start = src => {
+    if(VOICE.blobUrl){ try{ URL.revokeObjectURL(VOICE.blobUrl); }catch(e){} VOICE.blobUrl=null; }
+    a.src = src;
+    a.playbackRate = Math.min(1.15, Math.max(0.55, rate || 1));   // pitch is preserved
+    a.onplaying = ()=>{ VOICE.ok = true; };
+    a.onended = ()=>{ if(tok === VOICE.token && onDone) onDone(); };
+    a.onerror = next;
+    const p = a.play(); if(p && p.catch) p.catch(()=>{});
+  };
+  const next = () => {
+    if(tok !== VOICE.token) return;
+    step++;
+    if(step === 0){ start(tts); return; }                  // direct (works in normal browsers)
+    const ri = step - 1;
+    if(ri < relays.length){                                // locked-down browsers: CORS relay
+      const ctrl = ('AbortController' in window) ? new AbortController() : null;
+      const kill = setTimeout(()=>{ if(ctrl) ctrl.abort(); }, 6000);
+      fetch(relays[ri](tts), ctrl ? { signal: ctrl.signal } : {})
+        .then(r => { clearTimeout(kill); if(!r.ok) throw new Error('relay '+r.status); return r.blob(); })
+        .then(b => {
+          clearTimeout(kill);
+          if(tok !== VOICE.token) return;
+          if(!(b.type||'').startsWith('audio') || b.size < 2000) throw new Error('not audio');
+          VOICE.blobUrl = URL.createObjectURL(b);
+          start(VOICE.blobUrl);
+        })
+        .catch(()=>{ clearTimeout(kill); next(); });
+    } else ttsFail();                                      // give up: flash the word
+  };
+  start(tts);
+  return true;
 }
-function refreshVoiceSelect(){
-  const sel = $('voice-select'); if(!sel) return;
-  const en = voices.filter(v => /^en[-_]?/i.test(v.lang || ''))
-                   .slice().sort((a,b) => voiceRank(b) - voiceRank(a));
+function say(text, rate){ return speak(text, rate); }
+function sayWordTwice(rate){
+  const twice = $('opt-twice') && $('opt-twice').checked;
+  return speak(S.word, rate, twice ? ()=>{ speak(S.word, Math.max(0.55, (rate||1)*0.85)); } : null);
+}
+(function initReaderSelect(){
+  const sel = $('voice-select');
   sel.innerHTML = '';
-  en.forEach(v=>{
+  READERS.forEach(r=>{
     const o = document.createElement('option');
-    o.value = v.name;
-    o.textContent = v.name.replace(/^(microsoft|google)\s+/i,'') + ' (' + v.lang + ')';
+    o.value = r.id; o.textContent = r.label;
     sel.appendChild(o);
   });
-  const cur = pickVoice(); if(cur) sel.value = cur.name;
-}
-function utter(text, rate){
-  const u = new SpeechSynthesisUtterance(text);
-  u.rate = rate || 1; u.pitch = 1; u.volume = 1;
-  const v = pickVoice(); if(v) u.voice = v;
-  synth.speak(u);
-}
-function say(text, rate){
-  if(!synth || !text) return false;
-  try{ synth.cancel(); utter(text, rate); return true; }catch(e){ return false; }
-}
-function sayWordTwice(rate){
-  if(!synth) return false;
-  try{
-    synth.cancel();
-    const twice = $('opt-twice') && $('opt-twice').checked;
-    utter(S.word, rate);
-    if(twice) utter(S.word, Math.max(0.5, rate*0.85));   // second listen, a touch slower
-    return true;
-  }catch(e){ return false; }
-}
+  sel.value = currentReader().id;
+})();
 
 /* ================= Helpers ================= */
 function shuffle(a){ for(let i=a.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [a[i],a[j]]=[a[j],a[i]]; } return a; }
@@ -1343,13 +1371,13 @@ function nextWord(){
   }else{
     inp.focus();
   }
-  if(synth){
+  if(canSpeak()){
     setFeedback(S.mode==='duel' ? 'Hands on your buzzers — first to ring in, spells it.' : 'Listen carefully…','');
     startTimer();
     setTimeout(()=>{ if(tok===S.session){ S.spoken=true; sayWordTwice(DIFF[S.diff].rate); } }, 450);
   }else{
-    // Fallback when the browser has no speech: flash the word briefly.
-    setFeedback('No speech support — memorise it quick: <b class="reveal">'+S.word.toUpperCase()+'</b>','warn');
+    // Fallback when audio is unavailable: flash the word briefly.
+    setFeedback('Audio unavailable — memorise it quick: <b class="reveal">'+S.word.toUpperCase()+'</b>','warn');
     setTimeout(()=>{
       if(tok!==S.session) return;
       setFeedback('Now type it from memory!','');
@@ -1531,7 +1559,7 @@ function advance(){
 
 function finishDuel(){
   stopTimer();
-  if(synth) synth.cancel();
+  stopSpeaking();
   S.playing=false;
   const order=S.players.slice().sort((a,b)=>b.score-a.score);
   const w=order[0];
@@ -1588,7 +1616,7 @@ function rankFor(s){
 
 function gameOver(){
   stopTimer();
-  if(synth) synth.cancel();
+  stopSpeaking();
   S.playing=false;
   let name='Player';
   try{ name = localStorage.getItem('sb_name') || 'Player'; }catch(e){}
@@ -1706,7 +1734,7 @@ function teardownNet(){
   try{ N.room && N.room.leave(); }catch(e){}
   N.room=null; N.send=null; N.isHost=false; N.started=false; N.hostPid=null;
   N.players=[]; S.players=[]; N.activePid=null; S.active=-1;
-  stopTimer(); if(synth) synth.cancel();
+  stopTimer(); stopSpeaking();
   const lb=$('net-lobby'); if(lb) lb.classList.add('hidden');
   const en=$('net-entry'); if(en) en.classList.remove('hidden');
   setNetBusy('btn-create-room', false, 'create a room');
@@ -1962,7 +1990,7 @@ function finishOnline(){
 }
 function applyEnd(msg){
   N.started=false; stopTimer(); S.playing=false;
-  if(synth) synth.cancel();
+  stopSpeaking();
   const st=msg.standings;
   const tied=st.length>1 && st[0].score===st[1].score;
   $('btn-again').textContent='back to the room';
@@ -2048,29 +2076,29 @@ document.querySelectorAll('.tab').forEach(b =>
   b.addEventListener('click', ()=>setTab(b.dataset.tab)));
 
 $('btn-test-voice').addEventListener('click', ()=>{
-  if(!say('Hello! This is how I will say the words. Ready to spell?', 0.9)) alert('Sorry — your browser does not support speech synthesis.');
+  speak('Hello! This is my natural reader voice. Ready to spell?', 1);
 });
 
 $('btn-repeat').addEventListener('click', ()=>{
   if(!S.playing) return;
-  if(synth) sayWordTwice(DIFF[S.diff].rate); else repeatFallback();
+  if(canSpeak()) sayWordTwice(DIFF[S.diff].rate); else repeatFallback();
 });
 $('btn-slow').addEventListener('click', ()=>{
   if(!S.playing) return;
-  if(synth) sayWordTwice(0.55); else repeatFallback();
+  if(canSpeak()) sayWordTwice(0.55); else repeatFallback();
 });
 $('btn-define').addEventListener('click', ()=>{
   if(!S.playing) return;
   setFeedback('meaning: '+S.definition, 'warn');
-  if(synth) say(S.definition, 0.95);
+  if(canSpeak()) say(S.definition, 0.95);
 });
 $('btn-sentence').addEventListener('click', ()=>{
   if(!S.playing) return;
-  if(synth) say(S.sentence, 0.95); else repeatFallback();
+  if(canSpeak()) say(S.sentence, 0.95); else repeatFallback();
 });
 $('btn-quit').addEventListener('click', ()=>{
   S.session++; stopTimer();
-  if(synth) synth.cancel();
+  stopSpeaking();
   S.playing=false;
   if(S.mode==='online') teardownNet();
   setTab(tab);
