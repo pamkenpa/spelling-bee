@@ -1104,6 +1104,7 @@ function playBlob(blob, rate, onDone){
   VOICE.blobUrl = URL.createObjectURL(blob);
   const a = VOICE.el || (VOICE.el = new Audio());
   a.src = VOICE.blobUrl;
+  a.volume = 1;
   a.playbackRate = Math.min(1.15, Math.max(0.55, rate || 1));
   a.onplaying = ()=>{ VOICE.ok = true; };
   a.onended = ()=>{ if(tok === VOICE.token && onDone) onDone(); };
@@ -1137,6 +1138,7 @@ function speakGoogle(text, rate, onDone, onStart){
     if(VOICE.blobUrl){ try{ URL.revokeObjectURL(VOICE.blobUrl); }catch(e){} VOICE.blobUrl=null; }
     const a = VOICE.el || (VOICE.el = new Audio());
     a.src = src;
+    a.volume = 1;
     a.playbackRate = Math.min(1.15, Math.max(0.55, rate || 1));
     a.onplaying = ()=>{ VOICE.ok = true; if(onStart) onStart(); };
     a.onended = ()=>{ if(tok === VOICE.token && onDone) onDone(); };
