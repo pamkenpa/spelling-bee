@@ -414,6 +414,7 @@
         <button type="button" class="btn-voice-test" id="btn-test-voice">test your speaker</button>
         <select id="voice-select" class="voice-select" aria-label="reader voice"></select>
         <label class="opt"><input type="checkbox" id="opt-twice" checked> say each word twice</label>
+        <span id="voice-status" class="opt"></span>
       </div>
 
       <div id="diff-section">
@@ -1024,21 +1025,24 @@ const DUEL_WORDS = 12;      // words per duel match
 const ANSWER_TIME = 12;     // seconds at the mic after ringing in
 const WRONG_PENALTY = 20;   // points lost for a wrong spelling
 
-/* ================= Readers — natural cloud voices ================= */
-/* The local robotic speechSynthesis bots are gone. Words are now spoken by
-   natural reader voices streamed as audio (Google's neural voices, the same
-   class of natural voices services like NaturalReaders sell — NaturalReaders
-   itself has no free embeddable API). */
+/* ================= Readers — Kokoro in-browser neural voice ================= */
+/* The voice bot is Kokoro-82M (hexgrad/kokoro), running fully in the player's
+   browser via kokoro-js + ONNX Runtime (WebGPU when available, WASM otherwise).
+   No server, no API key, no limits — and after the one-time model download it
+   works offline. Until the model is ready (or if it fails), words fall back to
+   an instant cloud-reader chain so gameplay never stalls. */
 const READERS = [
-  { id:'en',    label:'Reader 1 · US English · natural' },
-  { id:'en-GB', label:'Reader 2 · UK English · natural' }
+  { id:'af_heart', label:'Heart · US English · natural (Kokoro)' },
+  { id:'bf_emma',  label:'Emma · UK English · natural (Kokoro)' }
 ];
-const VOICE = { el:null, token:0, ok:false, tried:false };
-function canSpeak(){ return VOICE.ok || !VOICE.tried; }
+const VOICE = { el:null, token:0, ok:false, tried:false, blobUrl:null };
+const KOKORO = { lib:null, tts:null, loading:null, ready:false, failed:false };
+function canSpeak(){ return true; }
 function currentReader(){
   let r=null; try{ r = localStorage.getItem('sb_voice'); }catch(e){}
   return READERS.find(x => x.id === r) || READERS[0];
 }
+function voiceStatus(msg){ const el=$('voice-status'); if(el) el.textContent=msg||''; }
 function stopSpeaking(){
   VOICE.token++;
   try{ if(VOICE.el) VOICE.el.pause(); }catch(e){}
@@ -1047,16 +1051,80 @@ function stopSpeaking(){
 function ttsFail(){
   VOICE.ok = false;
   if(typeof S !== 'undefined' && S.playing && S.phase === 'listen')
-    setFeedback('Audio needs a connection — the word was: <b class="reveal">'+S.word.toUpperCase()+'</b>','warn');
+    setFeedback('Audio unavailable right now — the word was: <b class="reveal">'+S.word.toUpperCase()+'</b>','warn');
 }
-function speak(text, rate, onDone){
-  if(!text) return false;
-  VOICE.tried = true;
-  stopSpeaking();
+function wavBlob(samples, rate){
+  const n = samples.length;
+  const buf = new ArrayBuffer(44 + n*2);
+  const v = new DataView(buf);
+  const ws = (o,s)=>{ for(let i=0;i<s.length;i++) v.setUint8(o+i, s.charCodeAt(i)); };
+  ws(0,'RIFF'); v.setUint32(4, 36+n*2, true); ws(8,'WAVE'); ws(12,'fmt ');
+  v.setUint32(16,16,true); v.setUint16(20,1,true); v.setUint16(22,1,true);
+  v.setUint32(24,rate,true); v.setUint32(28,rate*2,true); v.setUint16(32,2,true); v.setUint16(34,16,true);
+  ws(36,'data'); v.setUint32(40,n*2,true);
+  let o=44;
+  for(let i=0;i<n;i++,o+=2){ const s=Math.max(-1,Math.min(1,samples[i])); v.setInt16(o, s<0?s*0x8000:s*0x7FFF, true); }
+  return new Blob([buf], {type:'audio/wav'});
+}
+function loadKokoro(){
+  if(KOKORO.tts) return Promise.resolve(KOKORO.tts);
+  if(KOKORO.loading) return KOKORO.loading;
+  KOKORO.loading = (async()=>{
+    const urls = [
+      'https://esm.sh/kokoro-js@1',
+      'https://cdn.jsdelivr.net/npm/kokoro-js@1/+esm'
+    ];
+    let lib = null, err = null;
+    for(const u of urls){ try{ lib = await import(u); break; }catch(e){ err = e; } }
+    if(!lib) throw err || new Error('kokoro-js failed to load');
+    const modelId = 'onnx-community/Kokoro-82M-v1.0-ONNX';
+    const progress = p => {
+      try{
+        if(p && p.status==='progress' && p.progress!=null && /onnx|bin/i.test(p.file||''))
+          voiceStatus('loading natural voice… '+Math.round(p.progress)+'% (one-time download)');
+      }catch(e){}
+    };
+    const useGPU = typeof navigator !== 'undefined' && 'gpu' in navigator;
+    if(useGPU){
+      try{ KOKORO.tts = await lib.KokoroTTS.from_pretrained(modelId, { dtype:'fp16', device:'webgpu', progress_callback:progress }); }
+      catch(e){ KOKORO.tts = null; }
+    }
+    if(!KOKORO.tts)
+      KOKORO.tts = await lib.KokoroTTS.from_pretrained(modelId, { dtype:'q8', device:'wasm', progress_callback:progress });
+    KOKORO.ready = true;
+    voiceStatus('natural voice ready ✓ — works offline from now on');
+    return KOKORO.tts;
+  })();
+  KOKORO.loading.catch(e=>{ KOKORO.failed = true; voiceStatus('natural voice failed to load — using the fallback reader'); });
+  return KOKORO.loading;
+}
+function playBlob(blob, rate, onDone){
   const tok = VOICE.token;
+  if(VOICE.blobUrl){ try{ URL.revokeObjectURL(VOICE.blobUrl); }catch(e){} }
+  VOICE.blobUrl = URL.createObjectURL(blob);
   const a = VOICE.el || (VOICE.el = new Audio());
+  a.src = VOICE.blobUrl;
+  a.playbackRate = Math.min(1.15, Math.max(0.55, rate || 1));
+  a.onplaying = ()=>{ VOICE.ok = true; };
+  a.onended = ()=>{ if(tok === VOICE.token && onDone) onDone(); };
+  a.onerror = ()=>{ if(tok === VOICE.token) ttsFail(); };
+  const p = a.play(); if(p && p.catch) p.catch(()=>{ if(tok === VOICE.token) ttsFail(); });
+}
+async function speakKokoro(text, rate, onDone){
+  const tok = VOICE.token;
+  try{
+    const tts = await loadKokoro();
+    if(tok !== VOICE.token) return;
+    const out = await tts.generate(text, { voice: currentReader().id, speed: Math.min(1.15, Math.max(0.55, rate || 1)) });
+    if(tok !== VOICE.token) return;
+    playBlob(wavBlob(out.audio, out.sampling_rate), rate, onDone);
+  }catch(e){
+    if(tok === VOICE.token) ttsFail();
+  }
+}
+function speakGoogle(text, rate, onDone){
   const tts = 'https://translate.google.com/translate_tts?ie=UTF-8&client=tw-ob&tl='
-            + encodeURIComponent(currentReader().id)
+            + encodeURIComponent(currentReader().id === 'bf_emma' ? 'en-GB' : 'en')
             + '&q=' + encodeURIComponent(String(text).slice(0, 200));
   const relays = [
     u => 'https://api.allorigins.win/raw?url=' + encodeURIComponent(u),
@@ -1065,19 +1133,21 @@ function speak(text, rate, onDone){
   let step = -1;   // -1 = direct, then relay index
   const start = src => {
     if(VOICE.blobUrl){ try{ URL.revokeObjectURL(VOICE.blobUrl); }catch(e){} VOICE.blobUrl=null; }
+    const a = VOICE.el || (VOICE.el = new Audio());
     a.src = src;
-    a.playbackRate = Math.min(1.15, Math.max(0.55, rate || 1));   // pitch is preserved
+    a.playbackRate = Math.min(1.15, Math.max(0.55, rate || 1));
     a.onplaying = ()=>{ VOICE.ok = true; };
     a.onended = ()=>{ if(tok === VOICE.token && onDone) onDone(); };
     a.onerror = next;
     const p = a.play(); if(p && p.catch) p.catch(()=>{});
   };
+  const tok = VOICE.token;
   const next = () => {
     if(tok !== VOICE.token) return;
     step++;
-    if(step === 0){ start(tts); return; }                  // direct (works in normal browsers)
+    if(step === 0){ start(tts); return; }
     const ri = step - 1;
-    if(ri < relays.length){                                // locked-down browsers: CORS relay
+    if(ri < relays.length){
       const ctrl = ('AbortController' in window) ? new AbortController() : null;
       const kill = setTimeout(()=>{ if(ctrl) ctrl.abort(); }, 6000);
       fetch(relays[ri](tts), ctrl ? { signal: ctrl.signal } : {})
@@ -1086,19 +1156,27 @@ function speak(text, rate, onDone){
           clearTimeout(kill);
           if(tok !== VOICE.token) return;
           if(!(b.type||'').startsWith('audio') || b.size < 2000) throw new Error('not audio');
-          VOICE.blobUrl = URL.createObjectURL(b);
-          start(VOICE.blobUrl);
+          start(URL.createObjectURL(b));
         })
         .catch(()=>{ clearTimeout(kill); next(); });
-    } else ttsFail();                                      // give up: flash the word
+    } else ttsFail();
   };
   start(tts);
   return true;
 }
+function speak(text, rate, onDone){
+  if(!text) return false;
+  VOICE.tried = true;
+  stopSpeaking();
+  if(KOKORO.ready){ speakKokoro(text, rate, onDone); return true; }
+  if(!KOKORO.failed) loadKokoro();          // start the one-time load in the background
+  return speakGoogle(text, rate, onDone);   // instant fallback while Kokoro downloads
+}
 function say(text, rate){ return speak(text, rate); }
 function sayWordTwice(rate){
   const twice = $('opt-twice') && $('opt-twice').checked;
-  return speak(S.word, rate, twice ? ()=>{ speak(S.word, Math.max(0.55, (rate||1)*0.85)); } : null);
+  const text = twice ? (S.word + '. ' + S.word) : S.word;
+  return speak(text, rate);
 }
 (function initReaderSelect(){
   const sel = $('voice-select');
