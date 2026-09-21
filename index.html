@@ -1110,19 +1110,20 @@ function playBlob(blob, rate, onDone){
   a.onerror = ()=>{ if(tok === VOICE.token) ttsFail(); };
   const p = a.play(); if(p && p.catch) p.catch(()=>{ if(tok === VOICE.token) ttsFail(); });
 }
-async function speakKokoro(text, rate, onDone){
+async function speakKokoro(text, rate, onDone, onStart){
   const tok = VOICE.token;
   try{
     const tts = await loadKokoro();
     if(tok !== VOICE.token) return;
     const out = await tts.generate(text, { voice: currentReader().id, speed: Math.min(1.15, Math.max(0.55, rate || 1)) });
     if(tok !== VOICE.token) return;
+    if(onStart) onStart();
     playBlob(wavBlob(out.audio, out.sampling_rate), rate, onDone);
   }catch(e){
     if(tok === VOICE.token) ttsFail();
   }
 }
-function speakGoogle(text, rate, onDone){
+function speakGoogle(text, rate, onDone, onStart){
   const tts = 'https://translate.google.com/translate_tts?ie=UTF-8&client=tw-ob&tl='
             + encodeURIComponent(currentReader().id === 'bf_emma' ? 'en-GB' : 'en')
             + '&q=' + encodeURIComponent(String(text).slice(0, 200));
@@ -1130,18 +1131,18 @@ function speakGoogle(text, rate, onDone){
     u => 'https://api.allorigins.win/raw?url=' + encodeURIComponent(u),
     u => 'https://api.codetabs.com/v1/proxy?quest=' + encodeURIComponent(u)
   ];
+  const tok = VOICE.token;
   let step = -1;   // -1 = direct, then relay index
   const start = src => {
     if(VOICE.blobUrl){ try{ URL.revokeObjectURL(VOICE.blobUrl); }catch(e){} VOICE.blobUrl=null; }
     const a = VOICE.el || (VOICE.el = new Audio());
     a.src = src;
     a.playbackRate = Math.min(1.15, Math.max(0.55, rate || 1));
-    a.onplaying = ()=>{ VOICE.ok = true; };
+    a.onplaying = ()=>{ VOICE.ok = true; if(onStart) onStart(); };
     a.onended = ()=>{ if(tok === VOICE.token && onDone) onDone(); };
     a.onerror = next;
     const p = a.play(); if(p && p.catch) p.catch(()=>{});
   };
-  const tok = VOICE.token;
   const next = () => {
     if(tok !== VOICE.token) return;
     step++;
@@ -1164,19 +1165,27 @@ function speakGoogle(text, rate, onDone){
   start(tts);
   return true;
 }
-function speak(text, rate, onDone){
+function speak(text, rate, onDone, onStart){
   if(!text) return false;
   VOICE.tried = true;
   stopSpeaking();
-  if(KOKORO.ready){ speakKokoro(text, rate, onDone); return true; }
+  if(KOKORO.ready){ speakKokoro(text, rate, onDone, onStart); return true; }
   if(!KOKORO.failed) loadKokoro();          // start the one-time load in the background
-  return speakGoogle(text, rate, onDone);   // instant fallback while Kokoro downloads
+  // model still downloading: give it a short grace period, then use the fallback
+  const wait = (KOKORO.loading && !KOKORO.failed)
+    ? Promise.race([KOKORO.loading.catch(()=>{}), new Promise(r=>setTimeout(r,8000))])
+    : Promise.resolve();
+  wait.then(()=>{
+    if(KOKORO.ready){ speakKokoro(text, rate, onDone, onStart); return; }
+    speakGoogle(text, rate, onDone, onStart);
+  });
+  return true;
 }
 function say(text, rate){ return speak(text, rate); }
-function sayWordTwice(rate){
+function sayWordTwice(rate, onStart){
   const twice = $('opt-twice') && $('opt-twice').checked;
   const text = twice ? (S.word + '. ' + S.word) : S.word;
-  return speak(text, rate);
+  return speak(text, rate, null, onStart);
 }
 (function initReaderSelect(){
   const sel = $('voice-select');
@@ -1347,6 +1356,11 @@ function runTimer(seconds, phaseName){
   S.tId=setInterval(tickLoop, 100);
 }
 function startTimer(){ runTimer(S.limit,'listen'); }
+/* Local rounds: the countdown only starts once the word is actually audible
+   (or after a 4s failsafe), so waiting for audio never eats the clock. */
+let roundTimerArmed = false;
+function armRoundTimer(){ roundTimerArmed = false; setTimeout(()=>timerGoNow(), 4000); }
+function timerGoNow(){ if(!roundTimerArmed){ roundTimerArmed = true; startTimer(); } }
 function tickLoop(){
   S.time -= 0.1;
   if(S.time <= 0){ S.time=0; paintTimer(); stopTimer(); onTimeUp(); return; }
@@ -1449,20 +1463,9 @@ function nextWord(){
   }else{
     inp.focus();
   }
-  if(canSpeak()){
-    setFeedback(S.mode==='duel' ? 'Hands on your buzzers — first to ring in, spells it.' : 'Listen carefully…','');
-    startTimer();
-    setTimeout(()=>{ if(tok===S.session){ S.spoken=true; sayWordTwice(DIFF[S.diff].rate); } }, 450);
-  }else{
-    // Fallback when audio is unavailable: flash the word briefly.
-    setFeedback('Audio unavailable — memorise it quick: <b class="reveal">'+S.word.toUpperCase()+'</b>','warn');
-    setTimeout(()=>{
-      if(tok!==S.session) return;
-      setFeedback('Now type it from memory!','');
-      S.spoken=true;
-      startTimer();
-    }, 2600);
-  }
+  setFeedback(S.mode==='duel' ? 'Hands on your buzzers — first to ring in, spells it.' : 'Listen carefully…','');
+  armRoundTimer();   // countdown starts when the word is actually heard (4s failsafe)
+  setTimeout(()=>{ if(tok===S.session){ S.spoken=true; sayWordTwice(DIFF[S.diff].rate, timerGoNow); } }, 450);
 }
 
 function repeatFallback(){
